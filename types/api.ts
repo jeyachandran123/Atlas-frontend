@@ -131,8 +131,17 @@ export interface ConversationOut {
   title: string;
   repo_id: string | null;
   total_tokens: number;
+  is_pinned: boolean;
+  pin_order: number | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ConversationsResponse {
+  conversations: ConversationOut[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface MessageOut {

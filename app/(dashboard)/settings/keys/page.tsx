@@ -6,9 +6,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/lib/hooks/use-auth";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { formatRelativeTime } from "@/lib/utils/format";
 
 export default function ApiKeysPage() {
+  const user = useAuthStore((s) => s.user);
   const { data: keys = [] } = useApiKeys();
   const createKey = useCreateApiKey();
   const revokeKey = useRevokeApiKey();
@@ -39,6 +41,12 @@ export default function ApiKeysPage() {
   return (
     <div className="h-full overflow-y-auto px-6 py-6">
       <div className="mx-auto max-w-2xl">
+        {user && (
+          <div className="mb-6 rounded-lg border border-border bg-surface px-4 py-3">
+            <p className="text-sm font-medium text-text-primary">{user.full_name || user.email}</p>
+            <p className="text-xs text-text-tertiary">{user.email}</p>
+          </div>
+        )}
         <h1 className="text-lg font-semibold text-text-primary">API keys</h1>
         <p className="mt-1 text-sm text-text-tertiary">
           Used by the CLI and IDE extensions to authenticate without your password.

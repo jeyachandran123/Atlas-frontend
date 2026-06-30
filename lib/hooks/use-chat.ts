@@ -5,14 +5,61 @@ import { useChatStore } from "@/lib/stores/chat-store";
 import type { ChatRequest, MessageOut } from "@/types/api";
 
 export const chatKeys = {
-  conversations: ["conversations"] as const,
+  conversations: (limit?: number, offset?: number) => 
+    ["conversations", { limit, offset }] as const,
   messages: (conversationId: string) => ["conversations", conversationId, "messages"] as const,
 };
 
-export function useConversations() {
+export function useConversations(limit = 15, offset = 0) {
   return useQuery({
-    queryKey: chatKeys.conversations,
-    queryFn: chatApi.listConversations,
+    queryKey: chatKeys.conversations(limit, offset),
+    queryFn: () => chatApi.listConversations(limit, offset),
+  });
+}
+
+export function useUpdateConversationTitle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, title }: { conversationId: string; title: string }) =>
+      chatApi.updateConversationTitle(conversationId, title),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
+export function useDeleteConversation() {
+  const queryClient = useQueryClient();
+  const { activeConversationId, setActiveConversation } = useChatStore();
+  return useMutation({
+    mutationFn: (conversationId: string) => chatApi.deleteConversation(conversationId),
+    onSuccess: (_, conversationId) => {
+      // Clear active conversation if it was deleted
+      if (activeConversationId === conversationId) {
+        setActiveConversation(null);
+      }
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
+export function usePinConversation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId: string) => chatApi.pinConversation(conversationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+}
+
+export function useUnpinConversation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId: string) => chatApi.unpinConversation(conversationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
   });
 }
 
@@ -28,7 +75,7 @@ export function useCreateConversation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (repoId?: string) => chatApi.createConversation(repoId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: chatKeys.conversations }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["conversations"] }),
   });
 }
 
@@ -88,7 +135,7 @@ export function useStreamChat() {
                 queryKey: chatKeys.messages(finalConvId),
               });
             }
-            queryClient.invalidateQueries({ queryKey: chatKeys.conversations });
+            queryClient.invalidateQueries({ queryKey: ["conversations"] });
           }
         },
         (error) => {

@@ -1,17 +1,30 @@
 import { api, API_BASE } from "@/lib/api/client";
 import { getAccessToken } from "@/lib/api/token-store";
-import type { ChatRequest, ChatResponse, ChatStreamEvent, ConversationOut, MessageOut } from "@/types/api";
+import type { ChatRequest, ChatResponse, ChatStreamEvent, ConversationOut, ConversationsResponse, MessageOut } from "@/types/api";
 
 export const chatApi = {
   send: (data: ChatRequest) => api.post<ChatResponse>("/chat/message", data),
 
-  listConversations: () => api.get<ConversationOut[]>("/chat/conversations"),
+  listConversations: (limit = 15, offset = 0) => 
+    api.get<ConversationsResponse>(`/chat/conversations?limit=${limit}&offset=${offset}`),
 
   createConversation: (repoId?: string) =>
     api.post<ConversationOut>("/chat/conversations", { repo_id: repoId }),
 
   getMessages: (conversationId: string) =>
     api.get<MessageOut[]>(`/chat/conversations/${conversationId}/messages`),
+  
+  updateConversationTitle: (conversationId: string, title: string) =>
+    api.patch<{ id: string; title: string }>(`/chat/conversations/${conversationId}`, { title }),
+  
+  deleteConversation: (conversationId: string) =>
+    api.delete<{ id: string; deleted: boolean }>(`/chat/conversations/${conversationId}`),
+  
+  pinConversation: (conversationId: string) =>
+    api.post<{ id: string; is_pinned: boolean }>(`/chat/conversations/${conversationId}/pin`, {}),
+  
+  unpinConversation: (conversationId: string) =>
+    api.delete<{ id: string; is_pinned: boolean }>(`/chat/conversations/${conversationId}/pin`),
 };
 
 /**
