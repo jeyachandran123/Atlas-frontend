@@ -1,0 +1,158 @@
+@import "tailwindcss";
+
+/*
+  ATLAS DESIGN TOKENS
+  ────────────────────────────────────────────────────────────────
+  Direction: precision developer tool. Near-black canvas, restrained
+  signature color reserved for agent/AI moments only (never decorative).
+  Typography: Geist Sans for UI, Geist Mono for code + citations +
+  any place a developer expects monospace alignment (line numbers,
+  token counts, hashes, timestamps).
+*/
+
+@theme {
+  /* ── Surface scale ─────────────────────────────────────────── */
+  --color-canvas: #09090b;
+  --color-surface: #18181b;
+  --color-surface-raised: #1f1f23;
+  --color-surface-overlay: #27272a;
+  --color-border: #27272a;
+  --color-border-subtle: #1f1f23;
+
+  /* ── Text scale ────────────────────────────────────────────── */
+  --color-text-primary: #fafafa;
+  --color-text-secondary: #a1a1aa;
+  --color-text-tertiary: #71717a;
+  --color-text-disabled: #52525b;
+
+  /* ── Signature accent — reserved for agent/AI activity ───────
+     Used ONLY for: streaming indicator, active tool badge, AI
+     citations, "thinking" states. Never used for generic UI chrome
+     (that stays neutral) — this is what makes the AI moments read
+     as intentional rather than decorative. */
+  --color-signal: #6366f1;
+  --color-signal-dim: #4338ca;
+  --color-signal-glow: #818cf8;
+
+  /* ── Semantic (diff / status) ─────────────────────────────── */
+  --color-add: #22c55e;
+  --color-add-bg: #14532d1a;
+  --color-remove: #ef4444;
+  --color-remove-bg: #7f1d1d1a;
+  --color-warning: #f59e0b;
+  --color-info: #38bdf8;
+
+  /* ── Index status colors ──────────────────────────────────── */
+  --color-status-ready: #22c55e;
+  --color-status-indexing: #f59e0b;
+  --color-status-error: #ef4444;
+  --color-status-pending: #71717a;
+
+  /* ── Typography ────────────────────────────────────────────── */
+  --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ── Radii — small and consistent, not rounded-soft ──────────
+     A coding tool's chrome should feel precise, not friendly-app
+     rounded. 6px ceiling on most elements. */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+
+  /* ── Motion ────────────────────────────────────────────────── */
+  --ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+
+  code,
+  pre,
+  kbd {
+    font-family: var(--font-mono);
+  }
+
+  /* Visible keyboard focus everywhere — non-negotiable for a dev tool */
+  :focus-visible {
+    outline: 2px solid var(--color-signal);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  ::selection {
+    background-color: var(--color-signal-dim);
+    color: var(--color-text-primary);
+  }
+
+  /* Thin, quiet scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-surface-overlay);
+    border-radius: 999px;
+    border: 2px solid var(--color-canvas);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-tertiary);
+  }
+}
+
+@layer utilities {
+  /* The signature streaming pulse — used on the left edge of an
+     in-progress assistant message and on active tool-call badges.
+     This is the one recurring motion signature of the product. */
+  @keyframes signal-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+  .animate-signal-pulse {
+    animation: signal-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-fade-in-up {
+    animation: fade-in-up var(--duration-base) var(--ease-out-quad);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-signal-pulse,
+    .animate-fade-in-up {
+      animation: none !important;
+    }
+  }
+}
