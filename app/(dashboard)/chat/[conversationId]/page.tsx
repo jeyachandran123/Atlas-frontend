@@ -17,7 +17,15 @@ export default function ConversationPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
+      <header
+        className="flex items-center gap-3 px-5 py-3"
+        style={{
+          borderBottom: "1px solid rgba(255,255,255,0.04)",
+          background: "rgba(7,7,12,0.6)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+        }}
+      >
         <RepoSelector />
       </header>
       <div className="flex-1 overflow-hidden">

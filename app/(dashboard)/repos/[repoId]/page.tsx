@@ -1,92 +1,248 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { ArrowLeft, FolderGit2 } from "lucide-react";
+import { ArrowLeft, FolderGit2, FileCode2, Layers, Clock, RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
-import { useRepo, useRepoJobs } from "@/lib/hooks/use-repos";
+import { useSyncRepo, useRepo, useRepoJobs } from "@/lib/hooks/use-repos";
 import { formatRelativeTime } from "@/lib/utils/format";
 import type { IndexStatus } from "@/types/api";
 
-const STATUS_VARIANT: Record<IndexStatus, "ready" | "indexing" | "error" | "pending"> = {
-  ready: "ready",
-  indexing: "indexing",
-  pending: "pending",
-  error: "error",
-  stale: "indexing",
+const STATUS: Record<IndexStatus, { label: string; color: string; bg: string; border: string }> = {
+  ready:    { label: "Ready",    color: "var(--success)",       bg: "var(--success-bg)",  border: "var(--success-border)"  },
+  indexing: { label: "Indexing", color: "var(--warning)",       bg: "var(--warning-bg)",  border: "var(--warning-border)"  },
+  pending:  { label: "Pending",  color: "var(--text-tertiary)", bg: "var(--surface-3)",   border: "var(--border-default)"  },
+  error:    { label: "Error",    color: "var(--danger)",        bg: "var(--danger-bg)",   border: "var(--danger-border)"   },
+  stale:    { label: "Stale",    color: "var(--warning)",       bg: "var(--warning-bg)",  border: "var(--warning-border)"  },
+};
+
+const JOB_STATUS: Record<string, { color: string; bg: string; border: string }> = {
+  completed: { color: "var(--success)", bg: "var(--success-bg)", border: "var(--success-border)" },
+  running:   { color: "var(--warning)", bg: "var(--warning-bg)", border: "var(--warning-border)" },
+  queued:    { color: "var(--text-tertiary)", bg: "var(--surface-3)", border: "var(--border-default)" },
+  failed:    { color: "var(--danger)",  bg: "var(--danger-bg)",  border: "var(--danger-border)"  },
+  cancelled: { color: "var(--text-tertiary)", bg: "var(--surface-3)", border: "var(--border-default)" },
 };
 
 export default function RepoDetailPage() {
   const params = useParams<{ repoId: string }>();
   const { data: repo, isLoading } = useRepo(params.repoId);
   const { data: jobs = [] } = useRepoJobs(params.repoId);
+  const syncRepo = useSyncRepo();
 
   if (isLoading || !repo) {
-    return <div className="h-full animate-pulse bg-canvas" />;
+    return (
+      <div className="h-full overflow-y-auto px-8 py-6">
+        <div className="mx-auto max-w-3xl space-y-4">
+          {[72, 180, 140].map((h, i) => (
+            <div
+              key={i}
+              className="animate-shimmer rounded-2xl"
+              style={{ height: h, border: "1px solid var(--border-subtle)" }}
+            />
+          ))}
+        </div>
+      </div>
+    );
   }
 
+  const s = STATUS[repo.index_status];
+  const isIndexing = repo.index_status === "indexing";
+
   return (
-    <div className="h-full overflow-y-auto px-6 py-6">
-      <div className="mx-auto max-w-3xl">
-        <Link href="/repos" className="flex items-center gap-1.5 text-xs text-text-tertiary hover:text-text-primary">
-          <ArrowLeft className="size-3.5" />
-          Repositories
-        </Link>
+    <div className="h-full overflow-y-auto">
+      {/* Sticky header */}
+      <div className="page-header">
+        <div className="mx-auto max-w-3xl">
+          <Link
+            href="/repos"
+            className="mb-3 flex w-fit items-center gap-1.5 text-[12px] transition-colors"
+            style={{ color: "var(--text-tertiary)" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-primary)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-tertiary)"; }}
+          >
+            <ArrowLeft className="size-3.5" />
+            Repositories
+          </Link>
 
-        <div className="mt-3 flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-md border border-border bg-surface">
-            <FolderGit2 className="size-5 text-text-secondary" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold text-text-primary">{repo.name}</h1>
-            <p className="font-mono text-xs text-text-tertiary">{repo.local_path}</p>
-          </div>
-          <Badge variant={STATUS_VARIANT[repo.index_status]} dot className="ml-auto">
-            {repo.index_status}
-          </Badge>
-        </div>
-
-        <div className="mt-6 grid grid-cols-3 gap-3">
-          <Stat label="Files" value={repo.file_count} />
-          <Stat label="Chunks" value={repo.chunk_count} />
-          <Stat
-            label="Last indexed"
-            value={repo.last_indexed_at ? formatRelativeTime(repo.last_indexed_at) : "Never"}
-          />
-        </div>
-
-        <h2 className="mt-8 text-sm font-medium text-text-primary">Index jobs</h2>
-        <div className="mt-2 flex flex-col gap-1.5">
-          {jobs.length === 0 ? (
-            <p className="text-xs text-text-tertiary">No index jobs yet.</p>
-          ) : (
-            jobs.map((job) => (
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
               <div
-                key={job.id}
-                className="flex items-center justify-between rounded-md border border-border bg-surface px-3 py-2 text-xs"
+                className="flex size-10 shrink-0 items-center justify-center rounded-xl"
+                style={{ background: "var(--accent-subtle)", border: "1px solid var(--accent-border)" }}
               >
-                <span className="font-mono text-text-secondary">{job.job_type}</span>
-                <span className="text-text-tertiary">
-                  {job.files_processed}/{job.files_total} files
-                </span>
-                <span className="text-text-tertiary">{formatRelativeTime(job.created_at)}</span>
-                <Badge variant={job.status === "completed" ? "ready" : job.status === "failed" ? "error" : "indexing"}>
-                  {job.status}
-                </Badge>
+                <FolderGit2 className="size-5" style={{ color: "var(--accent-glow)" }} />
               </div>
-            ))
-          )}
+              <div className="min-w-0">
+                <h1
+                  className="truncate text-[18px] font-semibold tracking-tight"
+                  style={{ color: "var(--text-primary)", letterSpacing: "-0.015em" }}
+                >
+                  {repo.name}
+                </h1>
+                <p className="truncate font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>
+                  {repo.local_path}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2">
+              <div
+                className="status-badge"
+                style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}` }}
+              >
+                <span
+                  className="size-1.5 rounded-full"
+                  style={{
+                    background: s.color,
+                    animation: isIndexing ? "pulse-glow 2s ease-in-out infinite" : "none",
+                  }}
+                />
+                {s.label}
+              </div>
+              <button
+                onClick={() => syncRepo.mutate(repo.id)}
+                disabled={isIndexing || syncRepo.isPending}
+                className="ghost-btn flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium"
+              >
+                <RefreshCw className={`size-3 ${isIndexing || syncRepo.isPending ? "animate-spin" : ""}`} />
+                Re-index
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-8 py-6">
+        <div className="mx-auto max-w-3xl space-y-6">
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard icon={FileCode2} label="Files" value={repo.file_count.toLocaleString()} />
+            <StatCard icon={Layers} label="Chunks" value={repo.chunk_count.toLocaleString()} />
+            <StatCard
+              icon={Clock}
+              label="Last indexed"
+              value={repo.last_indexed_at ? formatRelativeTime(repo.last_indexed_at) : "Never"}
+            />
+          </div>
+
+          {/* Index jobs */}
+          <div>
+            <h2
+              className="mb-3 text-[13px] font-semibold"
+              style={{ color: "var(--text-primary)" }}
+            >
+              Index jobs
+            </h2>
+            {jobs.length === 0 ? (
+              <div
+                className="flex items-center justify-center rounded-2xl py-12 text-[13px]"
+                style={{
+                  background: "var(--surface-1)",
+                  border: "1px dashed var(--border-default)",
+                  color: "var(--text-tertiary)",
+                }}
+              >
+                No index jobs yet
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {jobs.map((job) => {
+                  const js = JOB_STATUS[job.status] ?? JOB_STATUS.queued;
+                  const pct =
+                    job.files_total > 0
+                      ? Math.round((job.files_processed / job.files_total) * 100)
+                      : 0;
+                  return (
+                    <div
+                      key={job.id}
+                      className="overflow-hidden rounded-xl"
+                      style={{
+                        background: "var(--surface-1)",
+                        border: "1px solid var(--border-default)",
+                      }}
+                    >
+                      <div className="flex items-center justify-between px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <span
+                            className="size-1.5 shrink-0 rounded-full"
+                            style={{
+                              background: js.color,
+                              boxShadow: job.status === "running" ? `0 0 6px ${js.color}` : "none",
+                            }}
+                          />
+                          <span
+                            className="font-mono text-[12px] capitalize"
+                            style={{ color: "var(--text-secondary)" }}
+                          >
+                            {job.job_type}
+                          </span>
+                        </div>
+                        <div
+                          className="flex items-center gap-4 text-[11px]"
+                          style={{ color: "var(--text-muted)" }}
+                        >
+                          <span>{job.files_processed}/{job.files_total} files</span>
+                          <span>{formatRelativeTime(job.created_at)}</span>
+                          <span
+                            className="status-badge"
+                            style={{ background: js.bg, color: js.color, border: `1px solid ${js.border}` }}
+                          >
+                            {job.status}
+                          </span>
+                        </div>
+                      </div>
+                      {(job.status === "running" || job.status === "queued") && job.files_total > 0 && (
+                        <div className="h-0.5 w-full" style={{ background: "var(--surface-3)" }}>
+                          <div
+                            className="h-full transition-all duration-500"
+                            style={{
+                              width: `${pct}%`,
+                              background: "linear-gradient(90deg, var(--accent), #a78bfa)",
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
+function StatCard({
+  icon: Icon, label, value,
+}: {
+  icon: React.ElementType; label: string; value: string;
+}) {
   return (
-    <div className="rounded-lg border border-border bg-surface px-3.5 py-3">
-      <p className="text-xs text-text-tertiary">{label}</p>
-      <p className="mt-1 text-base font-semibold text-text-primary">{value}</p>
+    <div
+      className="flex flex-col gap-3 rounded-2xl p-4"
+      style={{
+        background: "var(--surface-1)",
+        border: "1px solid var(--border-default)",
+        boxShadow: "var(--shadow-sm)",
+      }}
+    >
+      <div
+        className="flex size-8 items-center justify-center rounded-lg"
+        style={{ background: "var(--accent-subtle)", border: "1px solid var(--accent-border)" }}
+      >
+        <Icon className="size-4" style={{ color: "var(--accent-glow)" }} />
+      </div>
+      <div>
+        <p className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>{label}</p>
+        <p
+          className="mt-0.5 text-[20px] font-semibold tracking-tight"
+          style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}
+        >
+          {value}
+        </p>
+      </div>
     </div>
   );
 }

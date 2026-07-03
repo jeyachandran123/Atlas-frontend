@@ -1,20 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { RefreshCw, FolderGit2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { useSyncRepo, useRepoJobs } from "@/lib/hooks/use-repos";
-import { useIndexJobProgress } from "@/lib/hooks/use-repos";
+import { RefreshCw, FolderGit2, Clock, FileCode2, Layers, ExternalLink } from "lucide-react";
+import { useSyncRepo, useRepoJobs, useIndexJobProgress } from "@/lib/hooks/use-repos";
 import { formatRelativeTime } from "@/lib/utils/format";
 import type { IndexStatus, RepoOut } from "@/types/api";
 
-const STATUS_VARIANT: Record<IndexStatus, "ready" | "indexing" | "error" | "pending"> = {
-  ready: "ready",
-  indexing: "indexing",
-  pending: "pending",
-  error: "error",
-  stale: "indexing",
+const STATUS: Record<IndexStatus, { label: string; color: string; bg: string; border: string }> = {
+  ready:    { label: "Ready",    color: "var(--success)",  bg: "var(--success-bg)",  border: "var(--success-border)"  },
+  indexing: { label: "Indexing", color: "var(--warning)",  bg: "var(--warning-bg)",  border: "var(--warning-border)"  },
+  pending:  { label: "Pending",  color: "var(--text-tertiary)", bg: "var(--surface-3)", border: "var(--border-default)" },
+  error:    { label: "Error",    color: "var(--danger)",   bg: "var(--danger-bg)",   border: "var(--danger-border)"   },
+  stale:    { label: "Stale",    color: "var(--warning)",  bg: "var(--warning-bg)",  border: "var(--warning-border)"  },
 };
 
 export function RepoCard({ repo }: { repo: RepoOut }) {
@@ -22,63 +19,131 @@ export function RepoCard({ repo }: { repo: RepoOut }) {
   const { data: jobs = [] } = useRepoJobs(repo.id);
   const activeJob = jobs.find((j) => j.status === "running" || j.status === "queued");
   const { data: progress } = useIndexJobProgress(activeJob?.id ?? null);
-
   const isIndexing = repo.index_status === "indexing" || !!activeJob;
   const pct =
     progress && progress.files_total > 0
       ? Math.round((progress.files_processed / progress.files_total) * 100)
       : 0;
+  const s = STATUS[repo.index_status];
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-4">
-      <div className="flex items-start justify-between gap-3">
-        <Link href={`/repos/${repo.id}`} className="flex min-w-0 items-center gap-2.5">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-canvas">
-            <FolderGit2 className="size-4 text-text-secondary" />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-text-primary">{repo.name}</p>
-            <p className="truncate text-xs text-text-tertiary font-mono">{repo.local_path}</p>
-          </div>
-        </Link>
-        <Badge variant={STATUS_VARIANT[repo.index_status]} dot>
-          {isIndexing ? "indexing" : repo.index_status}
-        </Badge>
-      </div>
+    <div className="card group relative flex flex-col overflow-hidden">
+      {/* Top accent line — visible on hover */}
+      <div
+        className="card-accent-line absolute inset-x-0 top-0 h-px"
+        style={{
+          background: "linear-gradient(90deg, transparent, var(--accent), transparent)",
+        }}
+      />
 
-      {isIndexing && progress && (
-        <div className="mt-3">
-          <div className="h-1 w-full overflow-hidden rounded-full bg-surface-overlay">
+      <div className="flex flex-col gap-4 p-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <Link href={`/repos/${repo.id}`} className="flex min-w-0 items-center gap-3">
             <div
-              className="h-full bg-signal transition-all duration-300"
-              style={{ width: `${pct}%` }}
+              className="flex size-10 shrink-0 items-center justify-center rounded-xl"
+              style={{
+                background: "var(--accent-subtle)",
+                border: "1px solid var(--accent-border)",
+              }}
+            >
+              <FolderGit2 className="size-5" style={{ color: "var(--accent-glow)" }} />
+            </div>
+            <div className="min-w-0">
+              <p
+                className="truncate text-[14px] font-semibold"
+                style={{ color: "var(--text-primary)" }}
+              >
+                {repo.name}
+              </p>
+              <p
+                className="mt-0.5 truncate font-mono text-[11px]"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {repo.local_path}
+              </p>
+            </div>
+          </Link>
+
+          {/* Status badge */}
+          <div
+            className="status-badge shrink-0"
+            style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}` }}
+          >
+            <span
+              className="size-1.5 rounded-full"
+              style={{
+                background: s.color,
+                animation: isIndexing ? "pulse-glow 2s ease-in-out infinite" : "none",
+              }}
             />
+            {isIndexing ? "Indexing" : s.label}
           </div>
-          <p className="mt-1.5 text-[11px] text-text-tertiary">
-            {progress.files_processed} / {progress.files_total} files · {progress.chunks_created} chunks
-          </p>
         </div>
-      )}
 
-      <div className="mt-3 flex items-center justify-between text-xs text-text-tertiary">
-        <span>
-          {repo.file_count} files · {repo.chunk_count} chunks
-        </span>
-        <span>
-          {repo.last_indexed_at ? `Indexed ${formatRelativeTime(repo.last_indexed_at)}` : "Never indexed"}
-        </span>
-      </div>
+        {/* Progress bar */}
+        {isIndexing && progress && (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex justify-between text-[11px]" style={{ color: "var(--text-muted)" }}>
+              <span>{progress.files_processed} / {progress.files_total} files</span>
+              <span>{pct}%</span>
+            </div>
+            <div
+              className="h-1 w-full overflow-hidden rounded-full"
+              style={{ background: "var(--surface-3)" }}
+            >
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${pct}%`,
+                  background: "linear-gradient(90deg, var(--accent), #7c3aed)",
+                  boxShadow: "0 0 8px rgba(99,102,241,0.35)",
+                }}
+              />
+            </div>
+          </div>
+        )}
 
-      <div className="mt-3 flex justify-end">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => syncRepo.mutate(repo.id)}
-          disabled={isIndexing || syncRepo.isPending}
+        {/* Stats */}
+        <div className="flex items-center gap-4 text-[12px]" style={{ color: "var(--text-tertiary)" }}>
+          <span className="flex items-center gap-1.5">
+            <FileCode2 className="size-3.5" />
+            {repo.file_count.toLocaleString()} files
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Layers className="size-3.5" />
+            {repo.chunk_count.toLocaleString()} chunks
+          </span>
+          <span className="ml-auto flex items-center gap-1.5">
+            <Clock className="size-3.5" />
+            {repo.last_indexed_at ? formatRelativeTime(repo.last_indexed_at) : "Never"}
+          </span>
+        </div>
+
+        {/* Footer */}
+        <div
+          className="flex items-center justify-between border-t pt-3"
+          style={{ borderColor: "var(--border-subtle)" }}
         >
-          <RefreshCw className={`size-3.5 ${isIndexing ? "animate-spin" : ""}`} />
-          Re-index
-        </Button>
+          <Link
+            href={`/repos/${repo.id}`}
+            className="flex items-center gap-1.5 text-[12px] transition-colors"
+            style={{ color: "var(--text-tertiary)" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--accent-glow)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-tertiary)"; }}
+          >
+            <ExternalLink className="size-3" />
+            View details
+          </Link>
+          <button
+            onClick={() => syncRepo.mutate(repo.id)}
+            disabled={isIndexing || syncRepo.isPending}
+            className="ghost-btn flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium"
+          >
+            <RefreshCw className={`size-3 ${isIndexing ? "animate-spin" : ""}`} />
+            Re-index
+          </button>
+        </div>
       </div>
     </div>
   );

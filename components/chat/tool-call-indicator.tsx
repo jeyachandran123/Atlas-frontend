@@ -1,54 +1,42 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { FileSearch, GitBranch, Terminal, Search } from "lucide-react";
+import { FileSearch, GitBranch, Terminal, Search, Loader2 } from "lucide-react";
 import type { ActiveToolCall } from "@/lib/stores/chat-store";
 
-const TOOL_ICON: Record<string, typeof FileSearch> = {
-  file_tool: FileSearch,
-  git_tool: GitBranch,
-  terminal_tool: Terminal,
-  search_tool: Search,
+const TOOLS: Record<string, { icon: typeof Search; label: string; color: string; bg: string }> = {
+  file_tool:     { icon: FileSearch, label: "Reading file",      color: "#60a5fa", bg: "rgba(96,165,250,0.08)" },
+  git_tool:      { icon: GitBranch,  label: "Checking git",      color: "#fb923c", bg: "rgba(251,146,60,0.08)" },
+  terminal_tool: { icon: Terminal,   label: "Running command",   color: "#4ade80", bg: "rgba(74,222,128,0.08)" },
+  search_tool:   { icon: Search,     label: "Searching code",    color: "#818cf8", bg: "rgba(99,102,241,0.08)" },
 };
+const DEFAULT = { icon: Search, label: "Working", color: "#818cf8", bg: "rgba(99,102,241,0.08)" };
 
-const TOOL_LABEL: Record<string, string> = {
-  file_tool: "Reading file",
-  git_tool: "Checking git",
-  terminal_tool: "Running command",
-  search_tool: "Searching codebase",
-};
-
-/**
- * The product's signature motion: when the agent invokes a tool mid-stream,
- * a quiet badge appears showing exactly what it's doing — not a generic
- * "thinking..." spinner. This is the moment that should make Atlas feel
- * different from a chatbot wrapper: the user sees the agent actually
- * working the codebase.
- */
 export function ToolCallIndicator({ call }: { call: ActiveToolCall | null }) {
   return (
     <AnimatePresence mode="wait">
-      {call && (
-        <motion.div
-          key={call.toolName + call.startedAt}
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          transition={{ duration: 0.15 }}
-          className="flex items-center gap-2 rounded-md border border-signal/20 bg-signal/5 px-3 py-1.5 text-xs text-signal-glow"
-        >
-          <ToolIcon name={call.toolName} />
-          <span className="font-mono">{TOOL_LABEL[call.toolName] ?? call.toolName}</span>
-          {call.rationale && (
-            <span className="text-text-tertiary truncate max-w-[280px]">— {call.rationale}</span>
-          )}
-        </motion.div>
-      )}
+      {call && (() => {
+        const t = TOOLS[call.toolName] ?? DEFAULT;
+        const Icon = t.icon;
+        return (
+          <motion.div
+            key={call.toolName + call.startedAt}
+            initial={{ opacity: 0, y: 4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+            transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+            className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-[12px] font-medium"
+            style={{ background: t.bg, border: `1px solid ${t.color}22`, color: t.color }}
+          >
+            <Loader2 className="size-3 animate-spin opacity-60" />
+            <Icon className="size-3" />
+            <span>{t.label}</span>
+            {call.rationale && (
+              <span className="max-w-[200px] truncate opacity-50">— {call.rationale}</span>
+            )}
+          </motion.div>
+        );
+      })()}
     </AnimatePresence>
   );
-}
-
-function ToolIcon({ name }: { name: string }) {
-  const Icon = TOOL_ICON[name] ?? Search;
-  return <Icon className="size-3.5 animate-signal-pulse" />;
 }

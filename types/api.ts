@@ -154,10 +154,13 @@ export interface MessageOut {
   created_at: string;
 }
 
+export type AgentMode = "auto" | "code" | "business";
+
 export interface ChatRequest {
   message: string;
   conversation_id?: string;
   repo_id?: string;
+  agent_mode?: AgentMode;
 }
 
 export interface ChatResponse {

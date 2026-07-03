@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Key, Plus, Trash2, Copy, Check } from "lucide-react";
+import { Key, Plus, Trash2, Copy, Check, User } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/lib/hooks/use-auth";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { formatRelativeTime } from "@/lib/utils/format";
@@ -22,12 +20,7 @@ export default function ApiKeysPage() {
     if (!newKeyName.trim()) return;
     createKey.mutate(
       { name: newKeyName.trim() },
-      {
-        onSuccess: (res) => {
-          setRevealedKey(res.key);
-          setNewKeyName("");
-        },
-      },
+      { onSuccess: (res) => { setRevealedKey(res.key); setNewKeyName(""); } },
     );
   }
 
@@ -39,80 +32,210 @@ export default function ApiKeysPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto px-6 py-6">
-      <div className="mx-auto max-w-2xl">
-        {user && (
-          <div className="mb-6 rounded-lg border border-border bg-surface px-4 py-3">
-            <p className="text-sm font-medium text-text-primary">{user.full_name || user.email}</p>
-            <p className="text-xs text-text-tertiary">{user.email}</p>
-          </div>
-        )}
-        <h1 className="text-lg font-semibold text-text-primary">API keys</h1>
-        <p className="mt-1 text-sm text-text-tertiary">
-          Used by the CLI and IDE extensions to authenticate without your password.
-        </p>
+    <div className="h-full overflow-y-auto">
+      <div className="page-header">
+        <div className="mx-auto max-w-2xl">
+          <h1
+            className="text-[17px] font-semibold"
+            style={{ color: "var(--text-primary)", letterSpacing: "-0.02em" }}
+          >
+            API Keys
+          </h1>
+          <p className="mt-0.5 text-[13px]" style={{ color: "var(--text-tertiary)" }}>
+            Authenticate the CLI and IDE extensions without your password.
+          </p>
+        </div>
+      </div>
 
-        {revealedKey && (
-          <div className="mt-5 rounded-lg border border-signal/30 bg-signal/5 p-4">
-            <p className="text-xs font-medium text-signal-glow">
-              Copy this key now — it won&apos;t be shown again.
+      <div className="px-8 py-6">
+        <div className="mx-auto max-w-2xl space-y-4">
+
+          {/* User card */}
+          {user && (
+            <div
+              className="flex items-center gap-3 rounded-xl p-4"
+              style={{
+                background: "var(--surface-1)",
+                border: "1px solid var(--border-default)",
+                boxShadow: "var(--shadow-sm)",
+              }}
+            >
+              <div
+                className="flex size-9 shrink-0 items-center justify-center rounded-xl"
+                style={{ background: "var(--accent-subtle)", border: "1px solid var(--accent-border)" }}
+              >
+                <User className="size-4" style={{ color: "var(--accent-bright)" }} />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>
+                  {user.full_name || user.email}
+                </p>
+                <p className="truncate text-[11px]" style={{ color: "var(--text-tertiary)" }}>
+                  {user.email}
+                </p>
+              </div>
+              <span
+                className="status-badge ml-auto shrink-0 capitalize"
+                style={{
+                  background: "var(--accent-subtle)",
+                  border: "1px solid var(--accent-border)",
+                  color: "var(--accent-glow)",
+                }}
+              >
+                {user.role}
+              </span>
+            </div>
+          )}
+
+          {/* Revealed key */}
+          {revealedKey && (
+            <div
+              className="overflow-hidden rounded-xl animate-fade-up"
+              style={{
+                background: "var(--accent-subtle)",
+                border: "1px solid var(--accent-border)",
+              }}
+            >
+              <div
+                className="px-4 py-3"
+                style={{ borderBottom: "1px solid var(--accent-border)" }}
+              >
+                <p className="text-[12px] font-medium" style={{ color: "var(--accent-glow)" }}>
+                  ⚠ Copy this key now — it won&apos;t be shown again.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-3">
+                <code
+                  className="flex-1 truncate rounded-lg px-3 py-2 font-mono text-[12px]"
+                  style={{
+                    background: "var(--canvas)",
+                    border: "1px solid var(--border-default)",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  {revealedKey}
+                </code>
+                <button
+                  onClick={handleCopy}
+                  className="ghost-btn flex shrink-0 items-center gap-1.5 px-3 py-2 text-[12px] font-medium"
+                >
+                  {copied
+                    ? <><Check className="size-3.5" style={{ color: "var(--success)" }} /> Copied</>
+                    : <><Copy className="size-3.5" /> Copy</>
+                  }
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Create key */}
+          <div
+            className="rounded-xl p-4"
+            style={{
+              background: "var(--surface-1)",
+              border: "1px solid var(--border-default)",
+              boxShadow: "var(--shadow-sm)",
+            }}
+          >
+            <p className="mb-3 text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>
+              Create new key
             </p>
-            <div className="mt-2 flex items-center gap-2">
-              <code className="flex-1 truncate rounded bg-canvas px-2.5 py-1.5 font-mono text-xs text-text-primary">
-                {revealedKey}
-              </code>
-              <Button variant="outline" size="sm" onClick={handleCopy}>
-                {copied ? <Check className="size-3.5 text-add" /> : <Copy className="size-3.5" />}
-              </Button>
+            <div className="flex gap-2">
+              <input
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                placeholder="e.g. VS Code extension"
+                className="dialog-input flex-1"
+              />
+              <button
+                onClick={handleCreate}
+                disabled={createKey.isPending || !newKeyName.trim()}
+                className="signal-btn flex shrink-0 items-center gap-1.5 px-4 py-2 text-[13px] font-semibold"
+              >
+                <Plus className="size-3.5" />
+                Create
+              </button>
             </div>
           </div>
-        )}
 
-        <div className="mt-5 flex gap-2">
-          <Input
-            value={newKeyName}
-            onChange={(e) => setNewKeyName(e.target.value)}
-            placeholder="Key name, e.g. 'VS Code extension'"
-          />
-          <Button variant="signal" onClick={handleCreate} disabled={createKey.isPending}>
-            <Plus className="size-4" />
-            Create
-          </Button>
-        </div>
-
-        <div className="mt-6 flex flex-col gap-2">
-          {keys.length === 0 ? (
-            <p className="py-8 text-center text-sm text-text-tertiary">No API keys yet.</p>
-          ) : (
-            keys.map((key) => (
+          {/* Keys list */}
+          <div>
+            <p
+              className="mb-3 text-[10px] font-semibold uppercase tracking-widest"
+              style={{ color: "var(--text-muted)", letterSpacing: "0.08em" }}
+            >
+              Active keys ({keys.length})
+            </p>
+            {keys.length === 0 ? (
               <div
-                key={key.id}
-                className="flex items-center justify-between rounded-md border border-border bg-surface px-3.5 py-2.5"
+                className="flex flex-col items-center gap-3 rounded-xl py-12 text-center"
+                style={{
+                  background: "var(--surface-1)",
+                  border: "1px dashed var(--border-default)",
+                }}
               >
-                <div className="flex items-center gap-2.5">
-                  <Key className="size-3.5 text-text-tertiary" />
-                  <div>
-                    <p className="text-sm text-text-primary">{key.name}</p>
-                    <p className="text-[11px] text-text-tertiary">
-                      {key.last_used_at
-                        ? `Last used ${formatRelativeTime(key.last_used_at)}`
-                        : "Never used"}{" "}
-                      · Created {formatRelativeTime(key.created_at)}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() =>
-                    revokeKey.mutate(key.id, { onSuccess: () => toast.success("Key revoked") })
-                  }
+                <div
+                  className="flex size-10 items-center justify-center rounded-xl"
+                  style={{ background: "var(--surface-2)", border: "1px solid var(--border-default)" }}
                 >
-                  <Trash2 className="size-3.5 text-remove" />
-                </Button>
+                  <Key className="size-4" style={{ color: "var(--text-muted)" }} />
+                </div>
+                <p className="text-[13px]" style={{ color: "var(--text-tertiary)" }}>
+                  No API keys yet
+                </p>
               </div>
-            ))
-          )}
+            ) : (
+              <div className="flex flex-col gap-2">
+                {keys.map((key) => (
+                  <div
+                    key={key.id}
+                    className="flex items-center justify-between gap-3 rounded-xl px-4 py-3"
+                    style={{
+                      background: "var(--surface-1)",
+                      border: "1px solid var(--border-default)",
+                    }}
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div
+                        className="flex size-7 shrink-0 items-center justify-center rounded-lg"
+                        style={{ background: "var(--surface-2)", border: "1px solid var(--border-default)" }}
+                      >
+                        <Key className="size-3.5" style={{ color: "var(--text-tertiary)" }} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>
+                          {key.name}
+                        </p>
+                        <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                          {key.last_used_at
+                            ? `Last used ${formatRelativeTime(key.last_used_at)}`
+                            : "Never used"
+                          }{" · "}Created {formatRelativeTime(key.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => revokeKey.mutate(key.id, { onSuccess: () => toast.success("Key revoked") })}
+                      className="flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors"
+                      style={{ color: "var(--text-muted)" }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "var(--danger-bg)";
+                        (e.currentTarget as HTMLButtonElement).style.color = "var(--danger)";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                        (e.currentTarget as HTMLButtonElement).style.color = "var(--text-muted)";
+                      }}
+                      title="Revoke key"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

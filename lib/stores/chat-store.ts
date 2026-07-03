@@ -16,9 +16,11 @@ interface ChatState {
   streamError: string | null;
   abortController: AbortController | null;
   optimisticUserMessage: MessageOut | null;
+  agentMode: "auto" | "code" | "business";
 
   setActiveConversation: (id: string | null) => void;
   setSelectedRepo: (repoId: string | null) => void;
+  setAgentMode: (mode: "auto" | "code" | "business") => void;
   startStream: (controller: AbortController, userMessage: MessageOut) => void;
   applyStreamEvent: (event: ChatStreamEvent) => void;
   endStream: () => void;
@@ -43,11 +45,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamError: null,
   abortController: null,
   optimisticUserMessage: null,
+  agentMode: "auto",
 
   setActiveConversation: (id) =>
     set({ activeConversationId: id, streamingContent: "", streamError: null }),
 
   setSelectedRepo: (repoId) => set({ selectedRepoId: repoId }),
+
+  setAgentMode: (mode) => set({ agentMode: mode }),
 
   startStream: (controller, userMessage) =>
     set({

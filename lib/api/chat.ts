@@ -2,6 +2,13 @@ import { api, API_BASE } from "@/lib/api/client";
 import { getAccessToken } from "@/lib/api/token-store";
 import type { ChatRequest, ChatResponse, ChatStreamEvent, ConversationOut, ConversationsResponse, MessageOut } from "@/types/api";
 
+// Direct backend URL for SSE streaming — bypasses the Next.js proxy which buffers responses.
+// Falls back to the proxy path if the direct URL is not set.
+const STREAM_BASE =
+  process.env.NEXT_PUBLIC_STREAM_BASE_URL ??
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "/api/backend";
+
 export const chatApi = {
   send: (data: ChatRequest) => api.post<ChatResponse>("/chat/message", data),
 
@@ -30,19 +37,14 @@ export const chatApi = {
 /**
  * Streams a chat response via SSE.
  *
- * The backend emits raw `text/event-stream` lines:
- *   data: {"type": "token", "content": "..."}
- *   data: {"type": "done", "conversation_id": "...", "tokens_used": 42}
- *   data: {"type": "error", "message": "..."}
+ * Uses a raw fetch + ReadableStream reader rather than EventSource because:
+ *   1. EventSource cannot send a POST body
+ *   2. EventSource cannot attach Authorization headers
+ *   3. No AbortController support in EventSource
  *
- * We use a raw fetch + ReadableStream reader rather than the native
- * EventSource API because EventSource:
- *   1. Cannot send a POST body (we need to send the ChatRequest payload)
- *   2. Cannot attach custom Authorization headers
- *   3. Has no built-in AbortController-based cancellation
- *
- * `onEvent` is called for every parsed SSE event. Returns an AbortController
- * so the caller can cancel mid-stream (stop button, navigation away, unmount).
+ * Hits STREAM_BASE directly (bypassing the Next.js proxy) to avoid
+ * response buffering — the proxy collects the full response before
+ * forwarding, which defeats streaming entirely.
  */
 export function streamChatMessage(
   payload: ChatRequest,
@@ -55,10 +57,12 @@ export function streamChatMessage(
   (async () => {
     try {
       const token = getAccessToken();
-      const response = await fetch(`${API_BASE}/chat/stream`, {
+      const response = await fetch(`${STREAM_BASE}/chat/stream`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Accept": "text/event-stream",
+          "Cache-Control": "no-cache",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(payload),
@@ -66,7 +70,8 @@ export function streamChatMessage(
       });
 
       if (!response.ok || !response.body) {
-        throw new Error(`Stream request failed: ${response.status}`);
+        const errText = await response.text().catch(() => response.statusText);
+        throw new Error(`Stream request failed: ${response.status} — ${errText}`);
       }
 
       const reader = response.body.getReader();
@@ -79,10 +84,9 @@ export function streamChatMessage(
 
         buffer += decoder.decode(value, { stream: true });
 
-        // SSE frames are separated by a blank line; each frame may contain
-        // multiple "data: ..." lines, but our backend emits one per frame.
+        // SSE frames are separated by double newline.
         const frames = buffer.split("\n\n");
-        buffer = frames.pop() ?? ""; // last (possibly incomplete) frame stays buffered
+        buffer = frames.pop() ?? "";
 
         for (const frame of frames) {
           const line = frame.trim();
@@ -95,7 +99,6 @@ export function streamChatMessage(
             const parsed = JSON.parse(jsonStr) as ChatStreamEvent;
             onEvent(parsed);
           } catch {
-            // Malformed frame — skip rather than crash the whole stream
             continue;
           }
         }
@@ -104,7 +107,6 @@ export function streamChatMessage(
       onComplete();
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
-        // Intentional cancellation — not an error condition
         onComplete();
         return;
       }

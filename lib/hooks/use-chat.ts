@@ -95,7 +95,7 @@ export function useStreamChat() {
   const controllerRef = useRef<AbortController | null>(null);
 
   const send = useCallback(
-    (message: string, repoId?: string) => {
+    (message: string, repoId?: string, agentMode: string = "auto") => {
       const conversationId = activeConversationId ?? undefined;
 
       // Always create optimistic user message immediately
@@ -117,7 +117,12 @@ export function useStreamChat() {
         ]);
       }
 
-      const payload: ChatRequest = { message, conversation_id: conversationId, repo_id: repoId };
+      const payload: ChatRequest = {
+        message,
+        conversation_id: conversationId,
+        repo_id: repoId,
+        agent_mode: agentMode as "auto" | "code" | "business",
+      };
 
       const controller = streamChatMessage(
         payload,

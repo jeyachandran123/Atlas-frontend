@@ -64,8 +64,19 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 function SessionGate({ status, children }: { status: "loading" | "ready" | "unauthenticated"; children: ReactNode }) {
   if (status === "loading") {
     return (
-      <div className="flex h-screen items-center justify-center bg-canvas">
-        <Loader2 className="size-5 animate-spin text-text-tertiary" />
+      <div className="flex h-screen items-center justify-center" style={{ background: "var(--color-canvas)" }}>
+        <div className="flex flex-col items-center gap-4">
+          <div
+            className="flex size-12 items-center justify-center rounded-2xl"
+            style={{
+              background: "linear-gradient(135deg, var(--accent), #6d28d9)",
+              boxShadow: "0 0 0 1px var(--accent-border), 0 8px 32px rgba(99,102,241,0.28)",
+            }}
+          >
+            <Loader2 className="size-5 animate-spin text-white" />
+          </div>
+          <p className="text-[13px] text-text-tertiary">Loading Atlas…</p>
+        </div>
       </div>
     );
   }
