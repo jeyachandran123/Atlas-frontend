@@ -98,7 +98,6 @@ export function useStreamChat() {
     (message: string, repoId?: string, agentMode: string = "auto") => {
       const conversationId = activeConversationId ?? undefined;
 
-      // Always create optimistic user message immediately
       const optimisticUserMessage: MessageOut = {
         id: `optimistic-user-${Date.now()}`,
         conversation_id: conversationId ?? "",
@@ -109,7 +108,6 @@ export function useStreamChat() {
         created_at: new Date().toISOString(),
       };
 
-      // Add to cache if conversation exists
       if (conversationId) {
         queryClient.setQueryData<MessageOut[]>(chatKeys.messages(conversationId), (old = []) => [
           ...old,
@@ -129,16 +127,12 @@ export function useStreamChat() {
         (event) => {
           applyStreamEvent(event);
           if (event.type === "done") {
-            // Set active conversation if this was the first message
             if (!activeConversationId && event.conversation_id) {
               setActiveConversation(event.conversation_id);
             }
-            // Invalidate queries to fetch the persisted messages
             const finalConvId = event.conversation_id || activeConversationId;
             if (finalConvId) {
-              queryClient.invalidateQueries({
-                queryKey: chatKeys.messages(finalConvId),
-              });
+              queryClient.invalidateQueries({ queryKey: chatKeys.messages(finalConvId) });
             }
             queryClient.invalidateQueries({ queryKey: ["conversations"] });
           }
@@ -151,15 +145,74 @@ export function useStreamChat() {
       );
 
       controllerRef.current = controller;
-      // Pass the optimistic user message to startStream
-      startStream(controller, optimisticUserMessage);
+      startStream(controller, optimisticUserMessage, conversationId ?? null);
     },
     [activeConversationId, applyStreamEvent, endStream, queryClient, setActiveConversation, startStream],
+  );
+
+  /**
+   * Edit: truncate the conversation from the given message onwards,
+   * then re-send with the new text. The old message disappears.
+   */
+  const editAndResend = useCallback(
+    async (messageId: string, newText: string, repoId?: string) => {
+      const conversationId = activeConversationId;
+      if (!conversationId) return;
+
+      const isOptimistic = messageId.startsWith("optimistic-");
+
+      if (!isOptimistic) {
+        // Real DB message — truncate from this point
+        await chatApi.truncateMessagesFrom(conversationId, messageId);
+      }
+
+      // Remove from local cache from this message onwards
+      queryClient.setQueryData<MessageOut[]>(chatKeys.messages(conversationId), (old = []) => {
+        const idx = old.findIndex((m) => m.id === messageId);
+        return idx === -1 ? old : old.slice(0, idx);
+      });
+
+      send(newText, repoId, "auto");
+    },
+    [activeConversationId, queryClient, send],
+  );
+
+  const retry = useCallback(
+    async (messageId: string, content: string, repoId?: string) => {
+      const conversationId = activeConversationId;
+      if (!conversationId) return;
+
+      const isOptimistic = messageId.startsWith("optimistic-");
+
+      if (!isOptimistic) {
+        await chatApi.truncateMessagesFrom(conversationId, messageId);
+      }
+
+      queryClient.setQueryData<MessageOut[]>(chatKeys.messages(conversationId), (old = []) => {
+        const idx = old.findIndex((m) => m.id === messageId);
+        return idx === -1 ? old : old.slice(0, idx);
+      });
+
+      send(content, repoId, "auto");
+    },
+    [activeConversationId, queryClient, send],
   );
 
   const stop = useCallback(() => {
     controllerRef.current?.abort();
   }, []);
 
-  return { send, stop };
+  const deleteMessage = useCallback(
+    async (messageId: string) => {
+      const conversationId = activeConversationId;
+      if (!conversationId) return;
+      await chatApi.deleteMessage(conversationId, messageId);
+      queryClient.setQueryData<MessageOut[]>(chatKeys.messages(conversationId), (old = []) =>
+        old.filter((m) => m.id !== messageId)
+      );
+    },
+    [activeConversationId, queryClient],
+  );
+
+  return { send, editAndResend, retry, deleteMessage, stop };
 }

@@ -32,6 +32,12 @@ export const chatApi = {
   
   unpinConversation: (conversationId: string) =>
     api.delete<{ id: string; is_pinned: boolean }>(`/chat/conversations/${conversationId}/pin`),
+
+  truncateMessagesFrom: (conversationId: string, messageId: string) =>
+    api.delete<{ deleted_from: string }>(`/chat/conversations/${conversationId}/messages/from/${messageId}`),
+
+  deleteMessage: (conversationId: string, messageId: string) =>
+    api.delete<{ deleted: string }>(`/chat/conversations/${conversationId}/messages/${messageId}`),
 };
 
 /**

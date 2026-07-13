@@ -9,6 +9,7 @@ export interface ActiveToolCall {
 
 interface ChatState {
   activeConversationId: string | null;
+  streamingConversationId: string | null; // which conversation owns the active stream
   streamingContent: string;
   isStreaming: boolean;
   activeToolCall: ActiveToolCall | null;
@@ -21,7 +22,7 @@ interface ChatState {
   setActiveConversation: (id: string | null) => void;
   setSelectedRepo: (repoId: string | null) => void;
   setAgentMode: (mode: "auto" | "code" | "business") => void;
-  startStream: (controller: AbortController, userMessage: MessageOut) => void;
+  startStream: (controller: AbortController, userMessage: MessageOut, conversationId: string | null) => void;
   applyStreamEvent: (event: ChatStreamEvent) => void;
   endStream: () => void;
   stopStream: () => void;
@@ -38,6 +39,7 @@ interface ChatState {
  */
 export const useChatStore = create<ChatState>((set, get) => ({
   activeConversationId: null,
+  streamingConversationId: null,
   streamingContent: "",
   isStreaming: false,
   activeToolCall: null,
@@ -54,9 +56,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setAgentMode: (mode) => set({ agentMode: mode }),
 
-  startStream: (controller, userMessage) =>
+  startStream: (controller, userMessage, conversationId) =>
     set({
       isStreaming: true,
+      streamingConversationId: conversationId,
       streamingContent: "",
       streamError: null,
       activeToolCall: null,
