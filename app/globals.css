@@ -547,8 +547,130 @@ html[data-theme="light"] .code-block {
 
 .assistant-content {
   font-size: 14px;
-  line-height: 1.75;
+  line-height: 1.80;
   color: var(--text-primary);
+}
+
+/* ─── PROSE OVERRIDES — world-class response rendering ──────────── */
+.assistant-content h1,
+.assistant-content h2,
+.assistant-content h3,
+.assistant-content h4 {
+  color: var(--text-primary);
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.3;
+  margin-top: 1.6em;
+  margin-bottom: 0.5em;
+}
+.assistant-content h1 { font-size: 20px; }
+.assistant-content h2 {
+  font-size: 16px;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.assistant-content h3 { font-size: 14.5px; color: var(--text-secondary); }
+
+/* First heading needs no top margin */
+.assistant-content > *:first-child { margin-top: 0 !important; }
+
+/* Paragraphs */
+.assistant-content p {
+  margin: 0.6em 0;
+  line-height: 1.82;
+  color: var(--text-primary);
+}
+
+/* Bullet & numbered lists */
+.assistant-content ul,
+.assistant-content ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+.assistant-content li {
+  margin: 0.3em 0;
+  line-height: 1.72;
+  color: var(--text-primary);
+}
+.assistant-content li::marker {
+  color: var(--accent);
+}
+.assistant-content ul > li::marker {
+  content: "▸  ";
+  font-size: 11px;
+}
+
+/* Nested lists */
+.assistant-content li > ul,
+.assistant-content li > ol {
+  margin: 0.2em 0;
+}
+
+/* Blockquotes — used for dramatic moments / key insights */
+.assistant-content blockquote {
+  margin: 1em 0;
+  padding: 0.8em 1em 0.8em 1.2em;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-subtle);
+  border-radius: 0 8px 8px 0;
+  color: var(--text-secondary);
+  font-style: normal;
+  font-size: 13.5px;
+  line-height: 1.72;
+}
+.assistant-content blockquote p { margin: 0; color: inherit; }
+
+/* Bold — key terms */
+.assistant-content strong {
+  color: var(--text-primary);
+  font-weight: 620;
+}
+
+/* Horizontal rule */
+.assistant-content hr {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 1.4em 0;
+}
+
+/* Tables */
+.assistant-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 13px;
+}
+.assistant-content th {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 8px 12px;
+  border: 1px solid var(--border-default);
+  text-align: left;
+}
+.assistant-content td {
+  padding: 7px 12px;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  vertical-align: top;
+  line-height: 1.65;
+}
+.assistant-content tr:nth-child(even) td {
+  background: var(--surface-0);
+}
+
+/* Inline code */
+.assistant-content code:not(pre code) {
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-border);
+  color: var(--accent-glow);
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-size: 12.5px;
+  font-family: var(--font-family-mono);
 }
 
 /* Thinking indicator */

@@ -109,45 +109,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
 
 export const MessageMarkdown = memo(function MessageMarkdown({ content }: { content: string }) {
   return (
-    <div
-      className={cn(
-        "prose prose-sm max-w-none",
-        /* Base text */
-        "prose-p:leading-[1.78] prose-p:my-2",
-        /* Headings */
-        "prose-headings:font-semibold prose-headings:tracking-tight",
-        "prose-h1:text-[19px] prose-h2:text-[16px] prose-h3:text-[14px]",
-        "prose-h1:mt-5 prose-h2:mt-4 prose-h3:mt-3",
-        /* Inline code */
-        "prose-code:before:content-none prose-code:after:content-none",
-        /* Links */
-        "prose-a:no-underline hover:prose-a:underline",
-        /* Lists */
-        "prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5",
-        /* Blockquote */
-        "prose-blockquote:not-italic",
-        /* Pre — handled by CodeBlock, give it breathing room */
-        "prose-pre:bg-transparent prose-pre:p-0 prose-pre:my-3",
-      )}
-      style={{
-        "--tw-prose-body": "var(--text-primary)",
-        "--tw-prose-headings": "var(--text-primary)",
-        "--tw-prose-lead": "var(--text-secondary)",
-        "--tw-prose-links": "var(--accent-glow)",
-        "--tw-prose-bold": "var(--text-primary)",
-        "--tw-prose-counters": "var(--text-tertiary)",
-        "--tw-prose-bullets": "var(--text-muted)",
-        "--tw-prose-hr": "var(--border-default)",
-        "--tw-prose-quotes": "var(--text-secondary)",
-        "--tw-prose-quote-borders": "var(--accent-border)",
-        "--tw-prose-captions": "var(--text-tertiary)",
-        "--tw-prose-code": "var(--accent-glow)",
-        "--tw-prose-pre-code": "#c9d1d9",
-        "--tw-prose-pre-bg": "#0d0d14",
-        "--tw-prose-th-borders": "var(--border-default)",
-        "--tw-prose-td-borders": "var(--border-subtle)",
-      } as React.CSSProperties}
-    >
+    <div className="assistant-content">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -156,19 +118,10 @@ export const MessageMarkdown = memo(function MessageMarkdown({ content }: { cont
             const match = /language-(\w+)/.exec(className || "");
             if (!match) {
               return (
-                <code
-                  className="rounded-md px-1.5 py-0.5 font-mono text-[0.85em]"
-                  style={{
-                    background: "var(--accent-subtle)",
-                    border: "1px solid var(--accent-border)",
-                    color: "var(--accent-glow)",
-                  }}
-                >
-                  {children}
-                </code>
+                <code>{children}</code>
               );
             }
-            return <CodeBlock language={match[1]} code={String(children).replace(/\n$/, "")} />;
+           return <CodeBlock language={match[1] ?? "text"} code={String(children).replace(/\n$/, "")} />;
           },
         }}
       >
