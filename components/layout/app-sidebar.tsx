@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   MessageSquare, FolderGit2, Search, Settings,
   Plus, PanelLeftClose, PanelLeft,
-  Pin, PinOff, Edit2, Trash2, Check, X, Sun, Moon, Monitor,
+  Pin, PinOff, Edit2, Trash2, Check, X, Sun, Moon, Monitor, LogOut, ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useUIStore } from "@/lib/stores/ui-store";
@@ -18,12 +18,14 @@ import { useChatStore } from "@/lib/stores/chat-store";
 import { formatRelativeTime } from "@/lib/utils/format";
 import { Input } from "@/components/ui/input";
 import { useTheme } from "@/app/providers";
+import { useLogout } from "@/lib/hooks/use-auth";
 import type { ConversationOut } from "@/types/api";
 
 const NAV = [
-  { href: "/chat",   label: "New chat",     icon: MessageSquare, newChat: true },
-  { href: "/repos",  label: "Repositories", icon: FolderGit2 },
-  { href: "/search", label: "Search",        icon: Search },
+  { href: "/chat",    label: "New chat",     icon: MessageSquare, newChat: true,  isGallery: false },
+  { href: "/repos",   label: "Repositories", icon: FolderGit2,    newChat: false, isGallery: false },
+  { href: "/search",  label: "Search",        icon: Search,       newChat: false, isGallery: false },
+  { href: "#gallery", label: "Gallery",       icon: ImageIcon,    newChat: false, isGallery: true },
 ];
 
 const THEME_CYCLE: Array<"dark" | "light" | "system"> = ["dark", "light", "system"];
@@ -53,6 +55,9 @@ export function AppSidebar() {
   const hasMore = offset + limit < total;
   const { theme, setTheme } = useTheme();
   const ThemeIcon = THEME_ICONS[theme];
+  const logout = useLogout();
+  const toggleGallery = useUIStore((s) => s.toggleGallery);
+  const galleryOpen = useUIStore((s) => s.galleryOpen);
 
   function cycleTheme() {
     const next = THEME_CYCLE[(THEME_CYCLE.indexOf(theme) + 1) % THEME_CYCLE.length];
@@ -93,8 +98,26 @@ export function AppSidebar() {
           <PanelLeft className="size-[15px]" />
         </IconBtn>
         <div className="my-2 w-5 border-t" style={{ borderColor: "var(--border-subtle)" }} />
-        {NAV.map(({ href, icon: Icon, label }) => {
-          const active = pathname.startsWith(href);
+        {NAV.map(({ href, icon: Icon, label, isGallery }) => {
+          const active = isGallery ? galleryOpen : pathname.startsWith(href);
+          if (isGallery) {
+            return (
+              <button key={href} onClick={toggleGallery} title={label}>
+                <div
+                  className="flex size-8 items-center justify-center rounded-lg transition-all duration-150"
+                  style={active ? {
+                    background: "var(--accent-subtle)",
+                    color: "var(--accent-bright)",
+                    boxShadow: "inset 0 0 0 1px var(--accent-border)",
+                  } : {
+                    color: "var(--text-tertiary)",
+                  }}
+                >
+                  <Icon className="size-[15px]" />
+                </div>
+              </button>
+            );
+          }
           return (
             <Link key={href} href={href} title={label}>
               <div
@@ -154,8 +177,8 @@ export function AppSidebar() {
 
       {/* Nav */}
       <nav className="flex flex-col gap-0.5 px-2 pb-2">
-        {NAV.map(({ href, label, icon: Icon, newChat }) => {
-          const active = pathname.startsWith(href);
+        {NAV.map(({ href, label, icon: Icon, newChat, isGallery }) => {
+          const active = isGallery ? galleryOpen : pathname.startsWith(href);
           if (newChat) {
             return (
               <button
@@ -169,6 +192,27 @@ export function AppSidebar() {
                     },
                   });
                 }}
+                className={cn("sidebar-nav-item w-full", active && "active")}
+              >
+                <Icon
+                  className="size-[15px] shrink-0"
+                  style={{ color: active ? "var(--accent-bright)" : "var(--text-tertiary)" }}
+                />
+                <span>{label}</span>
+                {active && (
+                  <div
+                    className="ml-auto size-1.5 rounded-full"
+                    style={{ background: "var(--accent)", boxShadow: "0 0 5px var(--accent)" }}
+                  />
+                )}
+              </button>
+            );
+          }
+          if (isGallery) {
+            return (
+              <button
+                key={href}
+                onClick={toggleGallery}
                 className={cn("sidebar-nav-item w-full", active && "active")}
               >
                 <Icon
@@ -297,6 +341,15 @@ export function AppSidebar() {
           />
           <span>Settings</span>
         </Link>
+        <button
+          onClick={() => logout.mutate()}
+          disabled={logout.isPending}
+          className="sidebar-nav-item w-full"
+          style={{ color: "var(--danger)" }}
+        >
+          <LogOut className="size-[15px] shrink-0" />
+          <span>{logout.isPending ? "Signing out…" : "Sign out"}</span>
+        </button>
       </div>
     </div>
   );

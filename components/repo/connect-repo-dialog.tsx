@@ -16,7 +16,10 @@ const schema = z.object({
   local_path: z.string().optional(),
   remote_url: z.string().optional(),
   default_branch: z.string().optional(),
-});
+}).refine(
+  (d) => d.provider !== "local" || (!!d.local_path && d.local_path.trim().length > 0),
+  { message: "Local path is required", path: ["local_path"] },
+);
 type FormValues = z.infer<typeof schema>;
 
 const PROVIDERS = [
@@ -42,7 +45,7 @@ export function ConnectRepoDialog() {
         setOpen(false);
         reset();
       },
-      onError: (err) => toast.error(err instanceof ApiError ? err.message : "Failed to connect"),
+      onError: (err) => toast.error(err instanceof ApiError ? err.message : "Failed to connect repository"),
     });
   }
 
@@ -139,7 +142,7 @@ export function ConnectRepoDialog() {
                 </div>
 
                 {provider === "local" ? (
-                  <FormField label="Local path">
+                  <FormField label="Local path" error={errors.local_path?.message}>
                     <input
                       placeholder="C:\projects\my-app"
                       {...register("local_path")}

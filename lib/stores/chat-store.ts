@@ -7,9 +7,18 @@ export interface ActiveToolCall {
   startedAt: number;
 }
 
+/** Image preview stored alongside a user message */
+export interface MessageImage {
+  id: string;
+  url: string; // data URL (persists across renders, unlike object URLs)
+  name: string;
+  conversationId?: string;
+  timestamp?: number;
+}
+
 interface ChatState {
   activeConversationId: string | null;
-  streamingConversationId: string | null; // which conversation owns the active stream
+  streamingConversationId: string | null;
   streamingContent: string;
   isStreaming: boolean;
   activeToolCall: ActiveToolCall | null;
@@ -18,6 +27,10 @@ interface ChatState {
   abortController: AbortController | null;
   optimisticUserMessage: MessageOut | null;
   agentMode: "auto" | "code" | "business";
+  /** Maps message ID → image previews for display */
+  messageImages: Record<string, MessageImage[]>;
+  /** All images uploaded across all conversations (gallery) */
+  galleryImages: MessageImage[];
 
   setActiveConversation: (id: string | null) => void;
   setSelectedRepo: (repoId: string | null) => void;
@@ -28,6 +41,9 @@ interface ChatState {
   stopStream: () => void;
   resetStreamingContent: () => void;
   clearOptimisticMessage: () => void;
+  addMessageImages: (messageId: string, images: MessageImage[]) => void;
+  /** Copy images from optimistic msg ID to the real persisted msg ID */
+  transferMessageImages: (fromId: string, toId: string) => void;
 }
 
 /**
@@ -48,6 +64,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   abortController: null,
   optimisticUserMessage: null,
   agentMode: "auto",
+  messageImages: {},
+  galleryImages: [],
 
   setActiveConversation: (id) =>
     set({ activeConversationId: id, streamingContent: "", streamError: null }),
@@ -85,8 +103,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set({ streamError: event.message, isStreaming: false });
         break;
       case "done":
-        // Keep streaming content until query refetch completes
-        // The chat-thread component will handle switching to persisted messages
         set({ isStreaming: false, activeToolCall: null });
         break;
     }
@@ -102,4 +118,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
   resetStreamingContent: () => set({ streamingContent: "" }),
   
   clearOptimisticMessage: () => set({ optimisticUserMessage: null }),
+
+  addMessageImages: (messageId, images) =>
+    set((s) => ({
+      messageImages: { ...s.messageImages, [messageId]: images },
+      galleryImages: [...s.galleryImages, ...images],
+    })),
+
+  transferMessageImages: (fromId, toId) =>
+    set((s) => {
+      const imgs = s.messageImages[fromId];
+      if (!imgs) return {};
+      // Keep both keys so either ID resolves the images
+      return { messageImages: { ...s.messageImages, [toId]: imgs } };
+    }),
 }));

@@ -144,6 +144,16 @@ export interface ConversationsResponse {
   offset: number;
 }
 
+export interface MessageImageOut {
+  id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  width: number | null;
+  height: number | null;
+  url: string;
+}
+
 export interface MessageOut {
   id: string;
   conversation_id: string;
@@ -151,6 +161,7 @@ export interface MessageOut {
   content: string;
   agent_used: string | null;
   tokens_used: number;
+  images?: MessageImageOut[];
   created_at: string;
 }
 
@@ -161,6 +172,15 @@ export interface ChatRequest {
   conversation_id?: string;
   repo_id?: string;
   agent_mode?: AgentMode;
+}
+
+// Vision-enabled chat uses FormData (multipart), not JSON
+export interface VisionChatRequest {
+  message: string;
+  conversation_id?: string;
+  repo_id?: string;
+  agent_mode?: AgentMode;
+  images?: File[];
 }
 
 export interface ChatResponse {

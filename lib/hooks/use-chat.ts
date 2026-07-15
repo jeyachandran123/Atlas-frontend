@@ -90,12 +90,12 @@ export function useCreateConversation() {
  */
 export function useStreamChat() {
   const queryClient = useQueryClient();
-  const { startStream, applyStreamEvent, endStream, activeConversationId, setActiveConversation } =
+  const { startStream, applyStreamEvent, endStream, activeConversationId, setActiveConversation, addMessageImages } =
     useChatStore();
   const controllerRef = useRef<AbortController | null>(null);
 
   const send = useCallback(
-    (message: string, repoId?: string, agentMode: string = "auto") => {
+    (message: string, repoId?: string, agentMode: string = "auto", images?: File[]) => {
       const conversationId = activeConversationId ?? undefined;
 
       const optimisticUserMessage: MessageOut = {
@@ -107,6 +107,40 @@ export function useStreamChat() {
         tokens_used: 0,
         created_at: new Date().toISOString(),
       };
+
+      // Store image previews as data URLs BEFORE adding optimistic message
+      // so they're available when the component renders
+      if (images && images.length > 0) {
+        const previews: Array<{ id: string; url: string; name: string; conversationId?: string; timestamp?: number }> = [];
+        let loaded = 0;
+        const totalImages = images.length;
+        images.forEach((file) => {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            previews.push({
+              id: `${file.name}-${Date.now()}-${Math.random()}`,
+              url: ev.target?.result as string,
+              name: file.name,
+              conversationId: conversationId,
+              timestamp: Date.now(),
+            });
+            loaded++;
+            if (loaded === totalImages) {
+              addMessageImages(optimisticUserMessage.id, previews);
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+        // Also store immediately with object URLs as instant fallback
+        const instantPreviews = images.map((file) => ({
+          id: `instant-${file.name}-${Date.now()}-${Math.random()}`,
+          url: URL.createObjectURL(file),
+          name: file.name,
+          conversationId: conversationId,
+          timestamp: Date.now(),
+        }));
+        addMessageImages(optimisticUserMessage.id, instantPreviews);
+      }
 
       if (conversationId) {
         queryClient.setQueryData<MessageOut[]>(chatKeys.messages(conversationId), (old = []) => [
@@ -142,12 +176,13 @@ export function useStreamChat() {
           endStream();
         },
         () => endStream(),
+        images,
       );
 
       controllerRef.current = controller;
       startStream(controller, optimisticUserMessage, conversationId ?? null);
     },
-    [activeConversationId, applyStreamEvent, endStream, queryClient, setActiveConversation, startStream],
+    [activeConversationId, applyStreamEvent, endStream, queryClient, setActiveConversation, startStream, addMessageImages],
   );
 
   /**
@@ -206,10 +241,12 @@ export function useStreamChat() {
     async (messageId: string) => {
       const conversationId = activeConversationId;
       if (!conversationId) return;
-      await chatApi.deleteMessage(conversationId, messageId);
-      queryClient.setQueryData<MessageOut[]>(chatKeys.messages(conversationId), (old = []) =>
-        old.filter((m) => m.id !== messageId)
-      );
+      // Use truncateMessagesFrom so the user message + its assistant reply are both deleted
+      await chatApi.truncateMessagesFrom(conversationId, messageId);
+      queryClient.setQueryData<MessageOut[]>(chatKeys.messages(conversationId), (old = []) => {
+        const idx = old.findIndex((m) => m.id === messageId);
+        return idx === -1 ? old : old.slice(0, idx);
+      });
     },
     [activeConversationId, queryClient],
   );

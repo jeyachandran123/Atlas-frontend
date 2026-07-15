@@ -1,10 +1,11 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { ArrowLeft, FolderGit2, FileCode2, Layers, Clock, RefreshCw } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { ArrowLeft, FolderGit2, FileCode2, Layers, Clock, RefreshCw, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useSyncRepo, useRepo, useRepoJobs } from "@/lib/hooks/use-repos";
+import { useSyncRepo, useRepo, useRepoJobs, useDeleteRepo } from "@/lib/hooks/use-repos";
 import { formatRelativeTime } from "@/lib/utils/format";
+import { toast } from "sonner";
 import type { IndexStatus } from "@/types/api";
 
 const STATUS: Record<IndexStatus, { label: string; color: string; bg: string; border: string }> = {
@@ -12,7 +13,7 @@ const STATUS: Record<IndexStatus, { label: string; color: string; bg: string; bo
   indexing: { label: "Indexing", color: "var(--warning)",       bg: "var(--warning-bg)",  border: "var(--warning-border)"  },
   pending:  { label: "Pending",  color: "var(--text-tertiary)", bg: "var(--surface-3)",   border: "var(--border-default)"  },
   error:    { label: "Error",    color: "var(--danger)",        bg: "var(--danger-bg)",   border: "var(--danger-border)"   },
-  stale:    { label: "Stale",    color: "var(--warning)",       bg: "var(--warning-bg)",  border: "var(--warning-border)"  },
+  stale:    { label: "Stale — re-index needed", color: "var(--warning)", bg: "var(--warning-bg)", border: "var(--warning-border)" },
 };
 
 const JOB_STATUS: Record<string, { color: string; bg: string; border: string }> = {
@@ -25,9 +26,11 @@ const JOB_STATUS: Record<string, { color: string; bg: string; border: string }> 
 
 export default function RepoDetailPage() {
   const params = useParams<{ repoId: string }>();
+  const router = useRouter();
   const { data: repo, isLoading } = useRepo(params.repoId);
   const { data: jobs = [] } = useRepoJobs(params.repoId);
   const syncRepo = useSyncRepo();
+  const deleteRepo = useDeleteRepo();
 
   if (isLoading || !repo) {
     return (
@@ -106,6 +109,21 @@ export default function RepoDetailPage() {
               >
                 <RefreshCw className={`size-3 ${isIndexing || syncRepo.isPending ? "animate-spin" : ""}`} />
                 Re-index
+              </button>
+              <button
+                onClick={() => {
+                  if (!confirm(`Delete "${repo.name}"? This removes all indexed vectors and cannot be undone.`)) return;
+                  deleteRepo.mutate(repo.id, {
+                    onSuccess: () => { toast.success(`${repo.name} deleted`); router.push("/repos"); },
+                    onError: () => toast.error("Failed to delete repository"),
+                  });
+                }}
+                disabled={deleteRepo.isPending}
+                className="ghost-btn flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium"
+                style={{ color: "var(--danger)" }}
+              >
+                <Trash2 className="size-3" />
+                Delete
               </button>
             </div>
           </div>

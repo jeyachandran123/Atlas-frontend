@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Key, Plus, Trash2, Copy, Check, User } from "lucide-react";
+import { Key, Plus, Trash2, Copy, Check, User, LogOut } from "lucide-react";
 import { toast } from "sonner";
-import { useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/lib/hooks/use-auth";
+import { useApiKeys, useCreateApiKey, useRevokeApiKey, useLogout } from "@/lib/hooks/use-auth";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { formatRelativeTime } from "@/lib/utils/format";
 
@@ -12,6 +12,7 @@ export default function ApiKeysPage() {
   const { data: keys = [] } = useApiKeys();
   const createKey = useCreateApiKey();
   const revokeKey = useRevokeApiKey();
+  const logout = useLogout();
   const [newKeyName, setNewKeyName] = useState("");
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -84,6 +85,16 @@ export default function ApiKeysPage() {
               >
                 {user.role}
               </span>
+              <button
+                onClick={() => logout.mutate()}
+                disabled={logout.isPending}
+                className="ghost-btn flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium"
+                style={{ color: "var(--danger)" }}
+                title="Sign out"
+              >
+                <LogOut className="size-3.5" />
+                {logout.isPending ? "Signing out…" : "Sign out"}
+              </button>
             </div>
           )}
 

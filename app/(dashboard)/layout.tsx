@@ -4,8 +4,11 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import { ImageGalleryPanel } from "@/components/chat/image-gallery-panel";
 import { useCurrentUser } from "@/lib/hooks/use-auth";
 import { setAccessToken } from "@/lib/api/token-store";
+import { scheduleProactiveRefresh } from "@/lib/api/client";
+import { useUIStore } from "@/lib/stores/ui-store";
 
 /**
  * Bootstraps the session on every hard navigation/refresh:
@@ -30,6 +33,7 @@ function useSessionBootstrap() {
         const { access_token } = await res.json();
         if (cancelled) return;
         setAccessToken(access_token);
+        scheduleProactiveRefresh(); // keep token alive for the whole session
         setStatus("ready");
       } catch {
         if (!cancelled) {
@@ -50,11 +54,14 @@ function useSessionBootstrap() {
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const status = useSessionBootstrap();
+  const galleryOpen = useUIStore((s) => s.galleryOpen);
+  const setGalleryOpen = useUIStore((s) => s.setGalleryOpen);
 
   return (
     <SessionGate status={status}>
       <div className="flex h-screen bg-canvas">
         <AppSidebar />
+        {galleryOpen && <ImageGalleryPanel onClose={() => setGalleryOpen(false)} />}
         <main className="flex-1 overflow-hidden">{children}</main>
       </div>
     </SessionGate>

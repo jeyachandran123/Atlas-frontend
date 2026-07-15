@@ -135,7 +135,7 @@ export function ChatThread() {
                   onEdit={m.role === "user" && !isActiveStream
                     ? (id, newContent) => handleEdit(id, newContent)
                     : undefined}
-                  onDelete={!isActiveStream ? (id) => deleteMessage(id) : undefined}
+                  onDelete={m.role === "user" && !isActiveStream ? (id) => deleteMessage(id) : undefined}
                   isLastUserWithoutReply={m.role === "user" && i === lastUnansweredUserIdx && !isActiveStream}
                 />
               )}
@@ -189,7 +189,7 @@ export function ChatThread() {
       >
         <div className="mx-auto max-w-[760px]">
           <ChatInput
-            onSend={(msg, _files, agentId) => send(msg, selectedRepoId ?? undefined, agentId ?? "auto")}
+            onSend={(msg, files, agentId) => send(msg, selectedRepoId ?? undefined, agentId ?? "auto", files)}
             onStop={stop}
             isStreaming={isActiveStream}
           />

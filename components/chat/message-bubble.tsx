@@ -4,6 +4,8 @@ import { Copy, Check, RotateCcw, Pencil, Trash2, AlertTriangle } from "lucide-re
 import { useEffect, useRef, useState } from "react";
 import { MessageMarkdown } from "@/components/chat/message-markdown";
 import { formatTokenCount } from "@/lib/utils/format";
+import { useChatStore } from "@/lib/stores/chat-store";
+import { getAccessToken } from "@/lib/api/token-store";
 import type { MessageOut } from "@/types/api";
 
 function DeleteConfirmModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
@@ -99,7 +101,56 @@ export function MessageBubble({
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(message.content);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Resolve images: prefer API response (persisted), fall back to Zustand (optimistic)
+  const zustandImages = useChatStore((s) => {
+    const direct = s.messageImages[message.id];
+    if (direct) return direct;
+    if (message.role === "user" && !message.id.startsWith("optimistic-")) {
+      for (const [key, imgs] of Object.entries(s.messageImages)) {
+        if (!key.startsWith("optimistic-") || !imgs.length) continue;
+        return imgs;
+      }
+    }
+    return undefined;
+  });
+
+  // For API images, we need authenticated fetch since <img> can't send Bearer tokens
+  const [resolvedApiImages, setResolvedApiImages] = useState<Array<{ id: string; url: string; name: string }>>([]);
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/backend";
+
+  useEffect(() => {
+    if (!message.images || message.images.length === 0) {
+      setResolvedApiImages([]);
+      return;
+    }
+    let cancelled = false;
+    Promise.all(
+      message.images.map(async (img) => {
+        const token = getAccessToken();
+        const res = await fetch(`${API_BASE}${img.url}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) return { id: img.id, url: "", name: img.filename };
+        const blob = await res.blob();
+        return { id: img.id, url: URL.createObjectURL(blob), name: img.filename };
+      })
+    ).then((results) => {
+      if (!cancelled) setResolvedApiImages(results.filter((r) => r.url));
+    });
+    return () => { cancelled = true; };
+  }, [message.images, API_BASE]);
+
+  // Build the image list: resolved API images > Zustand fallback
+  const displayImages: Array<{ id: string; url: string; name: string }> = (() => {
+    if (resolvedApiImages.length > 0) return resolvedApiImages;
+    if (zustandImages && zustandImages.length > 0) {
+      return zustandImages.map((img) => ({ id: img.id, url: img.url, name: img.name }));
+    }
+    return [];
+  })();
 
   // Auto-resize textarea as content grows
   useEffect(() => {
@@ -183,7 +234,43 @@ export function MessageBubble({
                 className="rounded-2xl px-4 py-3 text-sm leading-relaxed"
                 style={{ background: "var(--surface-2)", color: "var(--text-primary)" }}
               >
-                <p className="whitespace-pre-wrap">{message.content}</p>
+                {/* Attached images */}
+                {displayImages.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {displayImages.map((img) => (
+                      <div
+                        key={img.id}
+                        className="relative cursor-zoom-in overflow-hidden rounded-lg transition-transform hover:scale-[1.02]"
+                        onClick={() => setExpandedImage(img.url)}
+                      >
+                        <img
+                          src={img.url}
+                          alt={img.name}
+                          className="object-cover rounded-lg"
+                          style={{
+                            maxWidth: displayImages.length === 1 ? "280px" : "140px",
+                            maxHeight: displayImages.length === 1 ? "200px" : "120px",
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {message.content && <p className="whitespace-pre-wrap">{message.content}</p>}
+              </div>
+            )}
+            {/* Fullscreen image viewer */}
+            {expandedImage && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center cursor-zoom-out"
+                style={{ background: "rgba(0,0,0,0.85)" }}
+                onClick={() => setExpandedImage(null)}
+              >
+                <img
+                  src={expandedImage}
+                  alt="Expanded"
+                  className="max-h-[90vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
+                />
               </div>
             )}
             {!editing && (
@@ -218,39 +305,26 @@ export function MessageBubble({
 
   // ── Assistant message ─────────────────────────────────────────────────────
   return (
-    <>
-      {confirmDelete && (
-        <DeleteConfirmModal
-          onConfirm={() => { setConfirmDelete(false); onDelete?.(message.id); }}
-          onCancel={() => setConfirmDelete(false)}
-        />
-      )}
-      <div className="flex gap-3 animate-fade-in-up">
-        <AtlasAvatar />
-        <div className="group flex min-w-0 flex-1 flex-col gap-1.5">
-          <div className="assistant-content min-w-0 w-full">
-            <MessageMarkdown content={message.content} />
-          </div>
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            {message.tokens_used > 0 && (
-              <span className="mr-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
-                {formatTokenCount(message.tokens_used)} tokens
-              </span>
-            )}
-            <ActionBtn onClick={handleCopy} title="Copy">
-              {copied
-                ? <Check className="size-3.5" style={{ color: "var(--success)" }} />
-                : <Copy className="size-3.5" />}
-            </ActionBtn>
-            {onDelete && (
-              <ActionBtn onClick={() => setConfirmDelete(true)} title="Delete" danger>
-                <Trash2 className="size-3.5" />
-              </ActionBtn>
-            )}
-          </div>
+    <div className="flex gap-3 animate-fade-in-up">
+      <AtlasAvatar />
+      <div className="group flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className="assistant-content min-w-0 w-full">
+          <MessageMarkdown content={message.content} />
+        </div>
+        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          {message.tokens_used > 0 && (
+            <span className="mr-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+              {formatTokenCount(message.tokens_used)} tokens
+            </span>
+          )}
+          <ActionBtn onClick={handleCopy} title="Copy">
+            {copied
+              ? <Check className="size-3.5" style={{ color: "var(--success)" }} />
+              : <Copy className="size-3.5" />}
+          </ActionBtn>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

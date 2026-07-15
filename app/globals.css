@@ -316,6 +316,11 @@
   .animate-signal-pulse { animation: pulse-glow 2s ease-in-out infinite; }
 
   @keyframes shimmer {
+  @keyframes indeterminate {
+    0%   { transform: translateX(-100%); width: 40%; }
+    50%  { transform: translateX(60%);  width: 40%; }
+    100% { transform: translateX(200%); width: 40%; }
+  }
     0%   { background-position: -600px 0; }
     100% { background-position:  600px 0; }
   }

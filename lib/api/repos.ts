@@ -9,6 +9,8 @@ export const reposApi = {
   connect: (data: ConnectRepoRequest) => api.post<RepoOut>("/repositories", data),
 
   sync: (repoId: string) => api.post<IndexJobOut>(`/repositories/${repoId}/sync`),
+
+  delete: (repoId: string) => api.delete<void>(`/repositories/${repoId}`),
 };
 
 export const indexingApi = {

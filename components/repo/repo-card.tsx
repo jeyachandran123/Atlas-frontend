@@ -20,10 +20,15 @@ export function RepoCard({ repo }: { repo: RepoOut }) {
   const activeJob = jobs.find((j) => j.status === "running" || j.status === "queued");
   const { data: progress } = useIndexJobProgress(activeJob?.id ?? null);
   const isIndexing = repo.index_status === "indexing" || !!activeJob;
-  const pct =
-    progress && progress.files_total > 0
-      ? Math.round((progress.files_processed / progress.files_total) * 100)
-      : 0;
+
+  // Live counts: use progress data during indexing, fall back to repo stats
+  const filesProcessed = progress?.files_processed ?? 0;
+  const filesTotal = progress?.files_total ?? 0;
+  const pct = filesTotal > 0 ? Math.round((filesProcessed / filesTotal) * 100) : 0;
+
+  const displayFileCount = isIndexing && filesTotal > 0 ? filesProcessed : repo.file_count;
+  const displayChunkCount = isIndexing && progress?.chunks_indexed != null ? progress.chunks_indexed : repo.chunk_count;
+
   const s = STATUS[repo.index_status];
 
   return (
@@ -81,12 +86,14 @@ export function RepoCard({ repo }: { repo: RepoOut }) {
           </div>
         </div>
 
-        {/* Progress bar */}
-        {isIndexing && progress && (
+        {/* Progress bar — always visible while indexing */}
+        {isIndexing && (
           <div className="flex flex-col gap-1.5">
             <div className="flex justify-between text-[11px]" style={{ color: "var(--text-muted)" }}>
-              <span>{progress.files_processed} / {progress.files_total} files</span>
-              <span>{pct}%</span>
+              <span>
+                {filesTotal > 0 ? `${filesProcessed} / ${filesTotal} files` : "Starting…"}
+              </span>
+              <span>{filesTotal > 0 ? `${pct}%` : ""}</span>
             </div>
             <div
               className="h-1 w-full overflow-hidden rounded-full"
@@ -95,12 +102,33 @@ export function RepoCard({ repo }: { repo: RepoOut }) {
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
-                  width: `${pct}%`,
+                  width: filesTotal > 0 ? `${pct}%` : "30%",
                   background: "linear-gradient(90deg, var(--accent), #7c3aed)",
                   boxShadow: "0 0 8px rgba(99,102,241,0.35)",
+                  animation: filesTotal === 0 ? "indeterminate 1.5s ease-in-out infinite" : "none",
                 }}
               />
             </div>
+          </div>
+        )}
+
+        {/* Stale warning */}
+        {repo.index_status === "stale" && !isIndexing && (
+          <div
+            className="flex items-center justify-between rounded-lg px-3 py-2 text-[12px]"
+            style={{
+              background: "var(--warning-bg)",
+              border: "1px solid var(--warning-border)",
+              color: "var(--warning)",
+            }}
+          >
+            <span>Files changed — index is out of date</span>
+            <button
+              onClick={() => syncRepo.mutate(repo.id)}
+              className="font-semibold underline underline-offset-2"
+            >
+              Re-index now
+            </button>
           </div>
         )}
 
@@ -108,11 +136,11 @@ export function RepoCard({ repo }: { repo: RepoOut }) {
         <div className="flex items-center gap-4 text-[12px]" style={{ color: "var(--text-tertiary)" }}>
           <span className="flex items-center gap-1.5">
             <FileCode2 className="size-3.5" />
-            {repo.file_count.toLocaleString()} files
+            {displayFileCount.toLocaleString()} files
           </span>
           <span className="flex items-center gap-1.5">
             <Layers className="size-3.5" />
-            {repo.chunk_count.toLocaleString()} chunks
+            {displayChunkCount.toLocaleString()} chunks
           </span>
           <span className="ml-auto flex items-center gap-1.5">
             <Clock className="size-3.5" />

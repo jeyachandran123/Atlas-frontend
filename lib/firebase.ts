@@ -6,11 +6,12 @@
  */
 
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
-import { 
-  getAuth, 
-  signInWithPopup, 
+import {
+  getAuth,
+  signInWithPopup,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
+  onIdTokenChanged,
   type Auth,
   type UserCredential,
 } from "firebase/auth";
@@ -53,60 +54,51 @@ export function getFirebaseAuth(): Auth {
 }
 
 /**
- * Sign in with Google using Firebase popup.
- * @returns UserCredential containing the user and ID token
- * @throws Error if sign-in fails or is cancelled
+ * Sign in with Google using a popup window.
+ * Returns the UserCredential directly — no redirect needed.
  */
 export async function signInWithGoogle(): Promise<UserCredential> {
   const auth = getFirebaseAuth();
   const provider = new GoogleAuthProvider();
-  
-  // Optional: Add scopes for additional permissions
-  // provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
-  // provider.addScope('https://www.googleapis.com/auth/userinfo.email');
-  
+  provider.setCustomParameters({ prompt: "select_account" });
   try {
-    const result = await signInWithPopup(auth, provider);
-    return result;
+    return await signInWithPopup(auth, provider);
   } catch (error: unknown) {
-    // Handle specific Firebase errors
-    if (error && typeof error === 'object' && 'code' in error) {
-      const firebaseError = error as { code: string; message: string };
-      
-      switch (firebaseError.code) {
-        case "auth/popup-closed-by-user":
-          throw new Error("Sign-in cancelled. Please try again.");
-        case "auth/popup-blocked":
-          throw new Error("Pop-up blocked by browser. Please allow pop-ups and try again.");
-        case "auth/cancelled-popup-request":
-          throw new Error("Sign-in cancelled. Please try again.");
-        case "auth/network-request-failed":
-          throw new Error("Network error. Please check your connection and try again.");
-        default:
-          throw new Error(firebaseError.message || "Failed to sign in with Google");
+    if (error && typeof error === "object" && "code" in error) {
+      const e = error as { code: string; message: string };
+      if (e.code === "auth/popup-closed-by-user" || e.code === "auth/cancelled-popup-request") {
+        throw new Error("Sign-in cancelled.");
       }
+      throw new Error(e.message || "Google sign-in failed.");
     }
     throw error;
   }
 }
 
 /**
- * Get Firebase ID token for the current user.
- * This token is sent to our backend for verification.
- * @returns Firebase ID token (JWT)
- * @throws Error if no user is signed in
+ * Get a fresh Firebase ID token for the current user.
+ * Always force-refreshes to avoid sending an expired token to the backend.
  */
 export async function getFirebaseIdToken(): Promise<string> {
   const auth = getFirebaseAuth();
   const user = auth.currentUser;
-  
-  if (!user) {
-    throw new Error("No user signed in");
-  }
-  
-  // Force refresh to get a fresh token
-  const token = await user.getIdToken(true);
-  return token;
+  if (!user) throw new Error("No user signed in");
+  return user.getIdToken(true);
+}
+
+/**
+ * Subscribe to Firebase ID token changes (auto-refresh every ~55 min).
+ * Calls the callback with the new token whenever Firebase rotates it.
+ * Returns an unsubscribe function.
+ */
+export function onFirebaseTokenRefresh(callback: (token: string) => void): () => void {
+  const auth = getFirebaseAuth();
+  return onIdTokenChanged(auth, async (user) => {
+    if (user) {
+      const token = await user.getIdToken();
+      callback(token);
+    }
+  });
 }
 
 /**

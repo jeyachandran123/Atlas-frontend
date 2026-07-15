@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { reposApi, indexingApi } from "@/lib/api/repos";
 import type { ConnectRepoRequest } from "@/types/api";
@@ -13,6 +14,12 @@ export function useRepos() {
   return useQuery({
     queryKey: repoKeys.all,
     queryFn: reposApi.list,
+    staleTime: 5000,
+    refetchInterval: (query) => {
+      const repos = query.state.data ?? [];
+      const hasIndexing = repos.some((r) => r.index_status === "indexing");
+      return hasIndexing ? 4000 : false;
+    },
   });
 }
 
@@ -21,6 +28,11 @@ export function useRepo(repoId: string | null) {
     queryKey: repoKeys.detail(repoId ?? ""),
     queryFn: () => reposApi.get(repoId as string),
     enabled: !!repoId,
+    staleTime: 5000,
+    refetchInterval: (query) => {
+      const status = query.state.data?.index_status;
+      return status === "indexing" ? 4000 : false;
+    },
   });
 }
 
@@ -40,6 +52,14 @@ export function useSyncRepo() {
       queryClient.invalidateQueries({ queryKey: repoKeys.jobs(repoId) });
       queryClient.invalidateQueries({ queryKey: repoKeys.detail(repoId) });
     },
+  });
+}
+
+export function useDeleteRepo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (repoId: string) => reposApi.delete(repoId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: repoKeys.all }),
   });
 }
 
@@ -63,9 +83,34 @@ export function useIndexJobProgress(jobId: string | null) {
 }
 
 export function useRepoJobs(repoId: string | null) {
-  return useQuery({
+  const queryClient = useQueryClient();
+  const didInvalidate = useRef(false);
+
+  const query = useQuery({
     queryKey: repoKeys.jobs(repoId ?? ""),
     queryFn: () => indexingApi.listRepoJobs(repoId as string),
     enabled: !!repoId,
+    staleTime: 5000,
+    refetchInterval: (q) => {
+      const jobs = q.state.data ?? [];
+      const hasActive = jobs.some((j) => j.status === "running" || j.status === "queued");
+      return hasActive ? 4000 : false;
+    },
   });
+
+  const jobs = query.data ?? [];
+  const hasActive = jobs.some((j) => j.status === "running" || j.status === "queued");
+  const hasCompleted = jobs.some((j) => j.status === "completed");
+
+  useEffect(() => {
+    if (!hasActive && hasCompleted && !didInvalidate.current) {
+      didInvalidate.current = true;
+      queryClient.invalidateQueries({ queryKey: repoKeys.all });
+    }
+    if (hasActive) {
+      didInvalidate.current = false;
+    }
+  }, [hasActive, hasCompleted, queryClient]);
+
+  return query;
 }

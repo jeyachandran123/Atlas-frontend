@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { authApi } from "@/lib/api/auth";
 import { setAccessToken, clearSession, setCurrentUserId } from "@/lib/api/token-store";
+import { scheduleProactiveRefresh } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import type { LoginRequest, RegisterRequest, FirebaseLoginRequest } from "@/types/api";
 
@@ -48,6 +49,7 @@ export function useLogin() {
       setAccessToken(res.access_token);
       setCurrentUserId(res.user.id);
       setUser(res.user);
+      scheduleProactiveRefresh();
 
       // Persist the refresh token via the BFF route handler — never in JS-readable storage
       await fetch("/api/auth/session", {
@@ -73,6 +75,7 @@ export function useFirebaseLogin() {
       setAccessToken(res.access_token);
       setCurrentUserId(res.user.id);
       setUser(res.user);
+      scheduleProactiveRefresh();
 
       // Persist the refresh token via the BFF route handler
       await fetch("/api/auth/session", {
@@ -105,6 +108,10 @@ export function useLogout() {
 
   return useMutation({
     mutationFn: async () => {
+      // Sign out from Firebase so its cached session is cleared.
+      // Next Google sign-in will always show the account picker.
+      const { signOut } = await import("@/lib/firebase");
+      await signOut().catch(() => {}); // non-blocking — don't fail logout if Firebase is down
       await fetch("/api/auth/session", { method: "DELETE" });
     },
     onSuccess: () => {

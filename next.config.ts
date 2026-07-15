@@ -1,18 +1,7 @@
 import type { NextConfig } from "next";
 
-const BACKEND_URL = process.env.ATLAS_BACKEND_URL || "http://127.0.0.1:8000";
-
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-
-  async rewrites() {
-    return [
-      {
-        source: "/api/backend/:path*",
-        destination: `${BACKEND_URL}/api/v1/:path*`,
-      },
-    ];
-  },
 
   // Disable response buffering for SSE (streaming chat) routes.
   // Without this Next.js buffers the entire response before forwarding.

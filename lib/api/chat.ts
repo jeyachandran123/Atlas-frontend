@@ -57,23 +57,48 @@ export function streamChatMessage(
   onEvent: (event: ChatStreamEvent) => void,
   onError: (error: Error) => void,
   onComplete: () => void,
+  images?: File[],
 ): AbortController {
   const controller = new AbortController();
 
   (async () => {
     try {
       const token = getAccessToken();
-      const response = await fetch(`${STREAM_BASE}/chat/stream`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "text/event-stream",
-          "Cache-Control": "no-cache",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
+      let response: Response;
+
+      if (images && images.length > 0) {
+        // Vision request — use multipart/form-data
+        const formData = new FormData();
+        formData.append("message", payload.message);
+        if (payload.conversation_id) formData.append("conversation_id", payload.conversation_id);
+        if (payload.repo_id) formData.append("repo_id", payload.repo_id);
+        formData.append("agent_mode", payload.agent_mode || "auto");
+        images.forEach((img) => formData.append("images", img));
+
+        response = await fetch(`${STREAM_BASE}/chat/stream/vision`, {
+          method: "POST",
+          headers: {
+            "Accept": "text/event-stream",
+            "Cache-Control": "no-cache",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: formData,
+          signal: controller.signal,
+        });
+      } else {
+        // Standard text request — JSON
+        response = await fetch(`${STREAM_BASE}/chat/stream`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            "Cache-Control": "no-cache",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+      }
 
       if (!response.ok || !response.body) {
         const errText = await response.text().catch(() => response.statusText);

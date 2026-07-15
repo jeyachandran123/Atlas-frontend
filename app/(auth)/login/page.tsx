@@ -30,12 +30,19 @@ export default function LoginPage() {
     setGoogleLoading(true);
     setGoogleError(null);
     try {
-      const cred = await signInWithGoogle();
-      const token = await cred.user.getIdToken();
-      firebaseLogin.mutate({ firebase_token: token });
+      const result = await signInWithGoogle();
+      const token = await result.user.getIdToken(true);
+      firebaseLogin.mutate(
+        { firebase_token: token },
+        {
+          onError: (e) => {
+            setGoogleError(e instanceof Error ? e.message : "Google sign-in failed.");
+            setGoogleLoading(false);
+          },
+        }
+      );
     } catch (e: unknown) {
       setGoogleError(e instanceof Error ? e.message : "Google sign-in failed.");
-    } finally {
       setGoogleLoading(false);
     }
   }
