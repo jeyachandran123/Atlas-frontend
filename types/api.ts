@@ -154,6 +154,16 @@ export interface MessageImageOut {
   url: string;
 }
 
+export interface MessageDocumentOut {
+  id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  page_count: number | null;
+  char_count: number;
+  url: string;
+}
+
 export interface MessageOut {
   id: string;
   conversation_id: string;
@@ -162,6 +172,7 @@ export interface MessageOut {
   agent_used: string | null;
   tokens_used: number;
   images?: MessageImageOut[];
+  documents?: MessageDocumentOut[];
   created_at: string;
 }
 
@@ -198,7 +209,9 @@ export type ChatStreamEvent =
   | { type: "token"; content: string }
   | { type: "tool_call"; tool_name: string; rationale?: string }
   | { type: "done"; conversation_id: string; tokens_used: number }
-  | { type: "error"; message: string };
+  // conversation_id lets the client adopt the conversation even when the
+  // stream fails — otherwise every retry would spawn a new conversation
+  | { type: "error"; message: string; conversation_id?: string };
 
 // ── Search & Retrieval ───────────────────────────────────────────────────
 

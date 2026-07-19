@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Check, RotateCcw, Pencil, Trash2, AlertTriangle } from "lucide-react";
+import { Copy, Check, RotateCcw, Pencil, Trash2, AlertTriangle, FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { MessageMarkdown } from "@/components/chat/message-markdown";
 import { formatTokenCount } from "@/lib/utils/format";
@@ -143,14 +143,44 @@ export function MessageBubble({
     return () => { cancelled = true; };
   }, [message.images, API_BASE]);
 
-  // Build the image list: resolved API images > Zustand fallback
+  // Build the image list: resolved API images > Zustand fallback (documents excluded)
   const displayImages: Array<{ id: string; url: string; name: string }> = (() => {
     if (resolvedApiImages.length > 0) return resolvedApiImages;
     if (zustandImages && zustandImages.length > 0) {
-      return zustandImages.map((img) => ({ id: img.id, url: img.url, name: img.name }));
+      return zustandImages
+        .filter((img) => !img.isDocument)
+        .map((img) => ({ id: img.id, url: img.url, name: img.name }));
     }
     return [];
   })();
+
+  // Build the document chip list: persisted API metadata > optimistic Zustand chips
+  const displayDocs: Array<{ id: string; name: string; url?: string; pages?: number | null }> = (() => {
+    if (message.documents && message.documents.length > 0) {
+      return message.documents.map((d) => ({
+        id: d.id, name: d.filename, url: d.url, pages: d.page_count,
+      }));
+    }
+    return (zustandImages ?? [])
+      .filter((img) => img.isDocument)
+      .map((d) => ({ id: d.id, name: d.name }));
+  })();
+
+  async function downloadDocument(doc: { name: string; url?: string }) {
+    if (!doc.url) return;
+    const token = getAccessToken();
+    const res = await fetch(`${API_BASE}${doc.url}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = doc.name;
+    a.click();
+    URL.revokeObjectURL(objUrl);
+  }
 
   // Auto-resize textarea as content grows
   useEffect(() => {
@@ -234,6 +264,32 @@ export function MessageBubble({
                 className="rounded-2xl px-4 py-3 text-sm leading-relaxed"
                 style={{ background: "var(--surface-2)", color: "var(--text-primary)" }}
               >
+                {/* Attached documents */}
+                {displayDocs.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {displayDocs.map((doc) => (
+                      <button
+                        key={doc.id}
+                        onClick={() => downloadDocument(doc)}
+                        title={doc.url ? `Download ${doc.name}` : doc.name}
+                        className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] transition-opacity hover:opacity-80"
+                        style={{
+                          background: "var(--surface-3)",
+                          border: "1px solid var(--border-default)",
+                          color: "var(--text-primary)",
+                          cursor: doc.url ? "pointer" : "default",
+                          maxWidth: "220px",
+                        }}
+                      >
+                        <FileText className="size-4 shrink-0" style={{ color: "var(--accent-bright)" }} />
+                        <span className="truncate font-medium">{doc.name}</span>
+                        {doc.pages != null && (
+                          <span style={{ color: "var(--text-muted)" }}>{doc.pages}p</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {/* Attached images */}
                 {displayImages.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-2">

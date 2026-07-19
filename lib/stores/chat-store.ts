@@ -7,13 +7,15 @@ export interface ActiveToolCall {
   startedAt: number;
 }
 
-/** Image preview stored alongside a user message */
+/** Attachment preview stored alongside a user message (image or document) */
 export interface MessageImage {
   id: string;
-  url: string; // data URL (persists across renders, unlike object URLs)
+  url: string; // data URL (persists across renders, unlike object URLs); "" for documents
   name: string;
   conversationId?: string;
   timestamp?: number;
+  /** True for non-image attachments (PDF/Word/text) — rendered as a file chip */
+  isDocument?: boolean;
 }
 
 interface ChatState {
@@ -122,7 +124,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   addMessageImages: (messageId, images) =>
     set((s) => ({
       messageImages: { ...s.messageImages, [messageId]: images },
-      galleryImages: [...s.galleryImages, ...images],
+      // Documents don't belong in the image gallery
+      galleryImages: [...s.galleryImages, ...images.filter((img) => !img.isDocument)],
     })),
 
   transferMessageImages: (fromId, toId) =>

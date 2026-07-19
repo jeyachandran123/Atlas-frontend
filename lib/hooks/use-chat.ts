@@ -95,7 +95,7 @@ export function useStreamChat() {
   const controllerRef = useRef<AbortController | null>(null);
 
   const send = useCallback(
-    (message: string, repoId?: string, agentMode: string = "auto", images?: File[]) => {
+    (message: string, repoId?: string, agentMode: string = "auto", files?: File[]) => {
       const conversationId = activeConversationId ?? undefined;
 
       const optimisticUserMessage: MessageOut = {
@@ -108,37 +108,55 @@ export function useStreamChat() {
         created_at: new Date().toISOString(),
       };
 
+      const imageFiles = (files ?? []).filter((f) => f.type.startsWith("image/"));
+      const docFiles = (files ?? []).filter((f) => !f.type.startsWith("image/"));
+
+      // Documents render as file chips — no preview URL needed
+      const docChips = docFiles.map((file) => ({
+        id: `doc-${file.name}-${Date.now()}-${Math.random()}`,
+        url: "",
+        name: file.name,
+        conversationId: conversationId,
+        timestamp: Date.now(),
+        isDocument: true,
+      }));
+
       // Store image previews as data URLs BEFORE adding optimistic message
       // so they're available when the component renders
-      if (images && images.length > 0) {
-        const previews: Array<{ id: string; url: string; name: string; conversationId?: string; timestamp?: number }> = [];
-        let loaded = 0;
-        const totalImages = images.length;
-        images.forEach((file) => {
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-            previews.push({
-              id: `${file.name}-${Date.now()}-${Math.random()}`,
-              url: ev.target?.result as string,
-              name: file.name,
-              conversationId: conversationId,
-              timestamp: Date.now(),
-            });
-            loaded++;
-            if (loaded === totalImages) {
-              addMessageImages(optimisticUserMessage.id, previews);
-            }
-          };
-          reader.readAsDataURL(file);
-        });
-        // Also store immediately with object URLs as instant fallback
-        const instantPreviews = images.map((file) => ({
-          id: `instant-${file.name}-${Date.now()}-${Math.random()}`,
-          url: URL.createObjectURL(file),
-          name: file.name,
-          conversationId: conversationId,
-          timestamp: Date.now(),
-        }));
+      if (imageFiles.length > 0 || docChips.length > 0) {
+        if (imageFiles.length > 0) {
+          const previews: Array<{ id: string; url: string; name: string; conversationId?: string; timestamp?: number; isDocument?: boolean }> = [...docChips];
+          let loaded = 0;
+          const totalImages = imageFiles.length;
+          imageFiles.forEach((file) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              previews.push({
+                id: `${file.name}-${Date.now()}-${Math.random()}`,
+                url: ev.target?.result as string,
+                name: file.name,
+                conversationId: conversationId,
+                timestamp: Date.now(),
+              });
+              loaded++;
+              if (loaded === totalImages) {
+                addMessageImages(optimisticUserMessage.id, previews);
+              }
+            };
+            reader.readAsDataURL(file);
+          });
+        }
+        // Also store immediately (object URLs for images, chips for documents)
+        const instantPreviews = [
+          ...imageFiles.map((file) => ({
+            id: `instant-${file.name}-${Date.now()}-${Math.random()}`,
+            url: URL.createObjectURL(file),
+            name: file.name,
+            conversationId: conversationId,
+            timestamp: Date.now(),
+          })),
+          ...docChips,
+        ];
         addMessageImages(optimisticUserMessage.id, instantPreviews);
       }
 
@@ -159,8 +177,12 @@ export function useStreamChat() {
       const controller = streamChatMessage(
         payload,
         (event) => {
-          applyStreamEvent(event);
-          if (event.type === "done") {
+          if (event.type === "done" || event.type === "error") {
+            // Adopt the conversation even on error — the backend has already
+            // created it and saved the user message. Without this, every
+            // failed send would spawn a brand-new conversation.
+            // (Runs BEFORE applyStreamEvent: setActiveConversation resets
+            // streamError, which would otherwise hide the error banner.)
             if (!activeConversationId && event.conversation_id) {
               setActiveConversation(event.conversation_id);
             }
@@ -170,13 +192,14 @@ export function useStreamChat() {
             }
             queryClient.invalidateQueries({ queryKey: ["conversations"] });
           }
+          applyStreamEvent(event);
         },
         (error) => {
           applyStreamEvent({ type: "error", message: error.message });
           endStream();
         },
         () => endStream(),
-        images,
+        files,
       );
 
       controllerRef.current = controller;
