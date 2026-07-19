@@ -69,7 +69,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               className="text-[18px] font-semibold"
               style={{ color: "var(--text-primary)", letterSpacing: "-0.03em" }}
             >
-              Atlas
+              UnityWorks
             </h1>
             <p className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>
               AI Coding Assistant

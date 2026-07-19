@@ -92,11 +92,12 @@ export function ConnectRepoDialog() {
                   >
                     Connect repository
                   </Dialog.Title>
-                  <p className="mt-0.5 text-[13px]" style={{ color: "var(--text-tertiary)" }}>
+                  <Dialog.Description className="mt-0.5 text-[13px]" style={{ color: "var(--text-tertiary)" }}>
                     Index your codebase for AI-powered answers
-                  </p>
+                  </Dialog.Description>
                 </div>
                 <Dialog.Close
+                  aria-label="Close dialog"
                   className="flex size-7 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface-3)]"
                   style={{ color: "var(--text-muted)" }}
                 >

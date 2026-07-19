@@ -76,21 +76,7 @@ export default function LoginPage() {
         type="button"
         onClick={handleGoogleSignIn}
         disabled={googleLoading || firebaseLogin.isPending}
-        className="group relative flex w-full items-center gap-3 overflow-hidden px-4 py-2.5 text-[13px] font-medium transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50"
-        style={{
-          background: "var(--surface-2)",
-          border: "1px solid var(--border-default)",
-          borderRadius: "10px",
-          color: "var(--text-primary)",
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background = "var(--surface-3)";
-          (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border-strong)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background = "var(--surface-2)";
-          (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border-default)";
-        }}
+        className="ghost-raise group relative flex w-full items-center gap-3 overflow-hidden rounded-[10px] px-4 py-2.5 text-[13px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
       >
         {googleLoading || firebaseLogin.isPending ? (
           <Loader2 className="size-4 animate-spin" style={{ color: "var(--accent-bright)" }} />
@@ -156,13 +142,7 @@ export default function LoginPage() {
 
       <p className="text-center text-[11px]" style={{ color: "var(--text-tertiary)" }}>
         No account?{" "}
-        <Link
-          href="/register"
-          className="font-medium transition-colors"
-          style={{ color: "var(--accent-glow)" }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--accent-bright)"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--accent-glow)"; }}
-        >
+        <Link href="/register" className="link-accent font-medium">
           Create one free
         </Link>
       </p>

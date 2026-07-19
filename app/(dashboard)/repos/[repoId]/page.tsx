@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, FolderGit2, FileCode2, Layers, Clock, RefreshCw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useSyncRepo, useRepo, useRepoJobs, useDeleteRepo } from "@/lib/hooks/use-repos";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatRelativeTime } from "@/lib/utils/format";
 import { toast } from "sonner";
 import type { IndexStatus } from "@/types/api";
@@ -31,6 +33,7 @@ export default function RepoDetailPage() {
   const { data: jobs = [] } = useRepoJobs(params.repoId);
   const syncRepo = useSyncRepo();
   const deleteRepo = useDeleteRepo();
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   if (isLoading || !repo) {
     return (
@@ -58,10 +61,7 @@ export default function RepoDetailPage() {
         <div className="mx-auto max-w-3xl">
           <Link
             href="/repos"
-            className="mb-3 flex w-fit items-center gap-1.5 text-[12px] transition-colors"
-            style={{ color: "var(--text-tertiary)" }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-primary)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-tertiary)"; }}
+            className="link-quiet mb-3 flex w-fit items-center gap-1.5 text-[12px]"
           >
             <ArrowLeft className="size-3.5" />
             Repositories
@@ -111,13 +111,7 @@ export default function RepoDetailPage() {
                 Re-index
               </button>
               <button
-                onClick={() => {
-                  if (!confirm(`Delete "${repo.name}"? This removes all indexed vectors and cannot be undone.`)) return;
-                  deleteRepo.mutate(repo.id, {
-                    onSuccess: () => { toast.success(`${repo.name} deleted`); router.push("/repos"); },
-                    onError: () => toast.error("Failed to delete repository"),
-                  });
-                }}
+                onClick={() => setConfirmDeleteOpen(true)}
                 disabled={deleteRepo.isPending}
                 className="ghost-btn flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium"
                 style={{ color: "var(--danger)" }}
@@ -125,6 +119,27 @@ export default function RepoDetailPage() {
                 <Trash2 className="size-3" />
                 Delete
               </button>
+              <ConfirmDialog
+                open={confirmDeleteOpen}
+                onOpenChange={setConfirmDeleteOpen}
+                title={`Delete “${repo.name}”?`}
+                description="This removes the repository and all of its indexed vectors. This action cannot be undone."
+                confirmLabel="Delete repository"
+                pending={deleteRepo.isPending}
+                onConfirm={() =>
+                  deleteRepo.mutate(repo.id, {
+                    onSuccess: () => {
+                      setConfirmDeleteOpen(false);
+                      toast.success(`${repo.name} deleted`);
+                      router.push("/repos");
+                    },
+                    onError: () => {
+                      setConfirmDeleteOpen(false);
+                      toast.error("Failed to delete repository");
+                    },
+                  })
+                }
+              />
             </div>
           </div>
         </div>
@@ -165,7 +180,7 @@ export default function RepoDetailPage() {
             ) : (
               <div className="flex flex-col gap-2">
                 {jobs.map((job) => {
-                  const js = JOB_STATUS[job.status] ?? JOB_STATUS.queued;
+                  const js = JOB_STATUS[job.status] ?? JOB_STATUS.queued!;
                   const pct =
                     job.files_total > 0
                       ? Math.round((job.files_processed / job.files_total) * 100)

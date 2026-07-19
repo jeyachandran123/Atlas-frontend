@@ -72,26 +72,13 @@ export function QuickActions({ onPick }: { onPick: (template: string) => void })
         <button
           key={label}
           onClick={() => onPick(template)}
-          className="group relative flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-all duration-200 animate-fade-in-up"
+          className="quick-action group relative flex items-center gap-3 rounded-xl px-4 py-3 text-left animate-fade-in-up"
           style={{
-            background: "var(--surface-1)",
-            border: "1px solid var(--border-default)",
             animationDelay: `${i * 35}ms`,
-          }}
-          onMouseEnter={(e) => {
-            const el = e.currentTarget as HTMLButtonElement;
-            el.style.background = bg;
-            el.style.borderColor = border;
-            el.style.transform = "translateY(-2px)";
-            el.style.boxShadow = `0 8px 24px ${glow}, var(--shadow-md)`;
-          }}
-          onMouseLeave={(e) => {
-            const el = e.currentTarget as HTMLButtonElement;
-            el.style.background = "var(--surface-1)";
-            el.style.borderColor = "var(--border-default)";
-            el.style.transform = "";
-            el.style.boxShadow = "";
-          }}
+            "--qa-bg": bg,
+            "--qa-border": border,
+            "--qa-glow": glow,
+          } as React.CSSProperties}
         >
           {/* Icon */}
           <div

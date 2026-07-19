@@ -228,16 +228,8 @@ export default function ApiKeysPage() {
                     </div>
                     <button
                       onClick={() => revokeKey.mutate(key.id, { onSuccess: () => toast.success("Key revoked") })}
-                      className="flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors"
-                      style={{ color: "var(--text-muted)" }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.background = "var(--danger-bg)";
-                        (e.currentTarget as HTMLButtonElement).style.color = "var(--danger)";
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-                        (e.currentTarget as HTMLButtonElement).style.color = "var(--text-muted)";
-                      }}
+                      aria-label={`Revoke key ${key.name}`}
+                      className="icon-btn danger size-7 shrink-0"
                       title="Revoke key"
                     >
                       <Trash2 className="size-3.5" />

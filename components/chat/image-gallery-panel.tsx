@@ -95,16 +95,8 @@ export function ImageGalleryPanel({ onClose }: { onClose: () => void }) {
           </div>
           <button
             onClick={onClose}
-            className="flex size-6 items-center justify-center rounded-md transition-colors"
-            style={{ color: "var(--text-muted)" }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = "var(--surface-3)";
-              (e.currentTarget as HTMLButtonElement).style.color = "var(--text-primary)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.background = "";
-              (e.currentTarget as HTMLButtonElement).style.color = "var(--text-muted)";
-            }}
+            aria-label="Close gallery"
+            className="icon-btn size-6"
           >
             <X className="size-3.5" />
           </button>

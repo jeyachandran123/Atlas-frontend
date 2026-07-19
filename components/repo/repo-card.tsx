@@ -27,7 +27,11 @@ export function RepoCard({ repo }: { repo: RepoOut }) {
   const pct = filesTotal > 0 ? Math.round((filesProcessed / filesTotal) * 100) : 0;
 
   const displayFileCount = isIndexing && filesTotal > 0 ? filesProcessed : repo.file_count;
-  const displayChunkCount = isIndexing && progress?.chunks_indexed != null ? progress.chunks_indexed : repo.chunk_count;
+  // API may report live chunk counts under either name depending on backend version
+  const liveChunks =
+    (progress as { chunks_indexed?: number; chunks_created?: number } | undefined)?.chunks_indexed
+    ?? progress?.chunks_created;
+  const displayChunkCount = isIndexing && liveChunks != null ? liveChunks : repo.chunk_count;
 
   const s = STATUS[repo.index_status];
 
@@ -155,10 +159,7 @@ export function RepoCard({ repo }: { repo: RepoOut }) {
         >
           <Link
             href={`/repos/${repo.id}`}
-            className="flex items-center gap-1.5 text-[12px] transition-colors"
-            style={{ color: "var(--text-tertiary)" }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--accent-glow)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--text-tertiary)"; }}
+            className="link-quiet-accent flex items-center gap-1.5 text-[12px]"
           >
             <ExternalLink className="size-3" />
             View details

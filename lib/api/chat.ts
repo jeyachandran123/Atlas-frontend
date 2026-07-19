@@ -1,4 +1,4 @@
-import { api, API_BASE } from "@/lib/api/client";
+import { api } from "@/lib/api/client";
 import { getAccessToken } from "@/lib/api/token-store";
 import type { ChatRequest, ChatResponse, ChatStreamEvent, ConversationOut, ConversationsResponse, MessageOut } from "@/types/api";
 

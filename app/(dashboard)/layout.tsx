@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
-import { AppSidebar } from "@/components/layout/app-sidebar";
+import { usePathname, useRouter } from "next/navigation";
+import { Loader2, PanelLeft } from "lucide-react";
+import { IconRail } from "@/components/layout/icon-rail";
+import { ContextPanel } from "@/components/layout/context-panel";
+import { CommandPalette } from "@/components/command/command-palette";
 import { ImageGalleryPanel } from "@/components/chat/image-gallery-panel";
 import { useCurrentUser } from "@/lib/hooks/use-auth";
 import { setAccessToken } from "@/lib/api/token-store";
@@ -56,11 +58,36 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const status = useSessionBootstrap();
   const galleryOpen = useUIStore((s) => s.galleryOpen);
   const setGalleryOpen = useUIStore((s) => s.setGalleryOpen);
+  const panelCollapsed = useUIStore((s) => s.sidebarCollapsed);
+  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+  const pathname = usePathname();
+
+  // The context panel belongs to the Chat space; other spaces get a full-width stage.
+  const onChat = pathname.startsWith("/chat");
+  const showPanel = onChat && !panelCollapsed;
 
   return (
     <SessionGate status={status}>
-      <div className="flex h-screen bg-canvas">
-        <AppSidebar />
+      <div className="relative flex h-screen bg-canvas">
+        <CommandPalette />
+        <IconRail />
+        {showPanel && <ContextPanel />}
+        {/* Always-visible re-open affordance when the list is hidden */}
+        {onChat && panelCollapsed && (
+          <button
+            onClick={toggleSidebar}
+            aria-label="Show conversations"
+            title="Show conversations (Ctrl+\)"
+            className="icon-btn absolute left-[60px] top-3 z-20 size-8"
+            style={{
+              background: "var(--surface-2)",
+              border: "1px solid var(--border-default)",
+              boxShadow: "var(--shadow-sm)",
+            }}
+          >
+            <PanelLeft className="size-[15px]" />
+          </button>
+        )}
         {galleryOpen && <ImageGalleryPanel onClose={() => setGalleryOpen(false)} />}
         <main className="flex-1 overflow-hidden">{children}</main>
       </div>
@@ -82,7 +109,7 @@ function SessionGate({ status, children }: { status: "loading" | "ready" | "unau
           >
             <Loader2 className="size-5 animate-spin text-white" />
           </div>
-          <p className="text-[13px] text-text-tertiary">Loading Atlas…</p>
+          <p className="text-[13px] text-text-tertiary">Loading UnityWorks…</p>
         </div>
       </div>
     );

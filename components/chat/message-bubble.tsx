@@ -1,69 +1,20 @@
 "use client";
 
-import { Copy, Check, RotateCcw, Pencil, Trash2, AlertTriangle, FileText } from "lucide-react";
+import { Copy, Check, RotateCcw, Pencil, Trash2, FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { MessageMarkdown } from "@/components/chat/message-markdown";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatTokenCount } from "@/lib/utils/format";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { getAccessToken } from "@/lib/api/token-store";
 import type { MessageOut } from "@/types/api";
-
-function DeleteConfirmModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: "rgba(0,0,0,0.55)" }}
-      onClick={onCancel}
-    >
-      <div
-        className="flex flex-col gap-4 rounded-2xl p-6 w-[340px] shadow-2xl"
-        style={{
-          background: "var(--surface-1)",
-          border: "1px solid var(--border-default)",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-3">
-          <div
-            className="flex size-9 shrink-0 items-center justify-center rounded-xl"
-            style={{ background: "var(--danger-bg)", border: "1px solid var(--danger-border)" }}
-          >
-            <AlertTriangle className="size-4" style={{ color: "var(--danger)" }} />
-          </div>
-          <div>
-            <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Delete message?</p>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-              This message and its response will be permanently removed.
-            </p>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={onCancel}
-            className="rounded-lg px-4 py-1.5 text-sm transition-opacity hover:opacity-80"
-            style={{ background: "var(--surface-3)", color: "var(--text-secondary)", border: "1px solid var(--border-default)" }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="rounded-lg px-4 py-1.5 text-sm font-medium transition-opacity hover:opacity-80"
-            style={{ background: "var(--danger)", color: "white" }}
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function AtlasAvatar({ streaming }: { streaming?: boolean }) {
   return (
     <div
       className="relative flex size-7 shrink-0 items-center justify-center rounded-lg"
       style={{
-        background: "linear-gradient(135deg, var(--accent) 0%, #6d28d9 100%)",
+        background: "var(--accent-gradient)",
         boxShadow: streaming
           ? "0 0 0 2px var(--accent-border), 0 2px 12px rgba(99,102,241,0.40)"
           : "0 2px 8px rgba(99,102,241,0.28), inset 0 1px 0 rgba(255,255,255,0.12)",
@@ -214,12 +165,14 @@ export function MessageBubble({
   if (isUser) {
     return (
       <>
-        {confirmDelete && (
-          <DeleteConfirmModal
-            onConfirm={() => { setConfirmDelete(false); onDelete?.(message.id); }}
-            onCancel={() => setConfirmDelete(false)}
-          />
-        )}
+        <ConfirmDialog
+          open={confirmDelete}
+          onOpenChange={setConfirmDelete}
+          title="Delete message?"
+          description="This message and its response will be permanently removed."
+          confirmLabel="Delete"
+          onConfirm={() => { setConfirmDelete(false); onDelete?.(message.id); }}
+        />
         <div className="flex justify-end animate-fade-in-up">
           <div className="group flex w-full max-w-[82%] flex-col items-end gap-1">
             {editing ? (
@@ -246,7 +199,7 @@ export function MessageBubble({
                   <button
                     onClick={() => setEditing(false)}
                     className="rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
-                    style={{ background: "var(--surface-3)", color: "var(--text-muted)", border: "1px solid var(--border)" }}
+                    style={{ background: "var(--surface-3)", color: "var(--text-muted)", border: "1px solid var(--border-default)" }}
                   >
                     Cancel
                   </button>
@@ -260,10 +213,7 @@ export function MessageBubble({
                 </div>
               </div>
             ) : (
-              <div
-                className="rounded-2xl px-4 py-3 text-sm leading-relaxed"
-                style={{ background: "var(--surface-2)", color: "var(--text-primary)" }}
-              >
+              <div className="user-bubble">
                 {/* Attached documents */}
                 {displayDocs.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-2">
@@ -394,10 +344,8 @@ function ActionBtn({ onClick, title, danger, children }: {
     <button
       onClick={onClick}
       title={title}
-      className="flex items-center justify-center rounded-lg p-1.5 transition-colors"
-      style={{ color: "var(--text-muted)" }}
-      onMouseEnter={(e) => (e.currentTarget.style.color = danger ? "var(--danger)" : "var(--text-primary)")}
-      onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+      aria-label={title}
+      className={`icon-btn p-1.5 ${danger ? "danger" : ""}`}
     >
       {children}
     </button>

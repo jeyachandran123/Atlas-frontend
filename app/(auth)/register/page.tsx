@@ -73,7 +73,7 @@ export default function RegisterPage() {
             Create account
           </h2>
           <p className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>
-            Set up your Atlas workspace
+            Set up your UnityWorks workspace
           </p>
         </div>
       </div>
@@ -83,21 +83,7 @@ export default function RegisterPage() {
         type="button"
         onClick={handleGoogleSignIn}
         disabled={googleLoading || firebaseLogin.isPending}
-        className="group flex w-full items-center gap-2.5 px-3 py-2 text-[12px] font-medium transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50"
-        style={{
-          background: "var(--surface-2)",
-          border: "1px solid var(--border-default)",
-          borderRadius: "8px",
-          color: "var(--text-primary)",
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background = "var(--surface-3)";
-          (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border-strong)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background = "var(--surface-2)";
-          (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border-default)";
-        }}
+        className="ghost-raise group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
       >
         {googleLoading || firebaseLogin.isPending ? (
           <Loader2 className="size-3.5 animate-spin" style={{ color: "var(--accent-bright)" }} />
@@ -166,13 +152,7 @@ export default function RegisterPage() {
 
       <p className="text-center text-[11px]" style={{ color: "var(--text-tertiary)" }}>
         Already have an account?{" "}
-        <Link
-          href="/login"
-          className="font-medium transition-colors"
-          style={{ color: "var(--accent-glow)" }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--accent-bright)"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "var(--accent-glow)"; }}
-        >
+        <Link href="/login" className="link-accent font-medium">
           Sign in
         </Link>
       </p>

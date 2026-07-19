@@ -5,7 +5,6 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { codeToHtml } from "shiki";
 import { Copy, Check } from "lucide-react";
-import { cn } from "@/lib/utils/cn";
 
 function useIsDark() {
   const [dark, setDark] = useState(true);
@@ -39,51 +38,26 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
     setTimeout(() => setCopied(false), 1500);
   }
 
-  const headerBg = isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)";
-  const headerBorder = isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)";
-  const langColor = isDark ? "#6e7681" : "#57606a";
-  const copyColor = isDark ? "#6e7681" : "#57606a";
-  const copyHoverColor = isDark ? "#c9d1d9" : "#24292f";
-  const copyHoverBg = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
-  const fallbackColor = isDark ? "#c9d1d9" : "#24292f";
-
   return (
     <div className="code-block group">
       {/* Header */}
       <div
-        className="flex items-center justify-between px-4 py-2.5"
+        className="flex items-center justify-between py-1.5 pl-4 pr-2"
         style={{
-          background: headerBg,
-          borderBottom: `1px solid ${headerBorder}`,
+          background: "var(--surface-2)",
+          borderBottom: "1px solid var(--code-border)",
         }}
       >
-        <div className="flex items-center gap-2.5">
-          <div className="flex gap-1.5">
-            <span className="size-2.5 rounded-full" style={{ background: "#ff5f57" }} />
-            <span className="size-2.5 rounded-full" style={{ background: "#febc2e" }} />
-            <span className="size-2.5 rounded-full" style={{ background: "#28c840" }} />
-          </div>
-          {language && (
-            <span
-              className="font-mono text-[10px] uppercase tracking-widest"
-              style={{ color: langColor }}
-            >
-              {language}
-            </span>
-          )}
-        </div>
+        <span
+          className="font-mono text-[11px] lowercase tracking-wide"
+          style={{ color: "var(--text-muted)" }}
+        >
+          {language || "code"}
+        </span>
         <button
           onClick={copy}
-          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-all"
-          style={{ color: copyColor }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.color = copyHoverColor;
-            (e.currentTarget as HTMLButtonElement).style.background = copyHoverBg;
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.color = copyColor;
-            (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-          }}
+          aria-label="Copy code"
+          className="icon-btn gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium"
         >
           {copied
             ? <><Check className="size-3" style={{ color: "#34d399" }} /> Copied</>
@@ -99,7 +73,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
           dangerouslySetInnerHTML={{ __html: html }}
         />
       ) : (
-        <pre className="overflow-x-auto p-4 text-[13px] leading-relaxed" style={{ color: fallbackColor }}>
+        <pre className="overflow-x-auto p-4 text-[13px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>
           <code className="font-mono">{code}</code>
         </pre>
       )}

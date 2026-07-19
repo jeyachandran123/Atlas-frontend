@@ -22,6 +22,16 @@ export const useUIStore = create<UIState>()(
       setGalleryOpen: (open) => set({ galleryOpen: open }),
       toggleGallery: () => set((s) => ({ galleryOpen: !s.galleryOpen })),
     }),
-    { name: "atlas-ui-prefs" },
+    {
+      name: "atlas-ui-prefs",
+      // v2: the V2 shell replaced the collapsible sidebar with rail + panel.
+      // Reset any stuck "collapsed" state so the conversation list is visible
+      // by default after the upgrade.
+      version: 2,
+      migrate: (persisted) => ({
+        ...(persisted as Partial<UIState>),
+        sidebarCollapsed: false,
+      }),
+    },
   ),
 );

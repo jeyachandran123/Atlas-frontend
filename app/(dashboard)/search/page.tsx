@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import * as Select from "@radix-ui/react-select";
 import { Search as SearchIcon, FileCode2, ChevronDown, Check } from "lucide-react";
 import { useRepos } from "@/lib/hooks/use-repos";
@@ -8,9 +9,19 @@ import { useSearch } from "@/lib/hooks/use-search";
 import { truncatePath } from "@/lib/utils/format";
 
 export default function SearchPage() {
+  return (
+    <Suspense fallback={null}>
+      <SearchPageInner />
+    </Suspense>
+  );
+}
+
+function SearchPageInner() {
   const { data: repos = [] } = useRepos();
-  const [query, setQuery] = useState("");
-  const [repoId, setRepoId] = useState<string>("");
+  // Deep-linkable: the ⌘K palette lands here with ?q= and ?repo= pre-filled.
+  const params = useSearchParams();
+  const [query, setQuery] = useState(params.get("q") ?? "");
+  const [repoId, setRepoId] = useState<string>(params.get("repo") ?? "");
   const { data, isFetching } = useSearch(
     query.length > 2 && repoId ? { query, repo_id: repoId, top_k: 12 } : null,
   );
@@ -184,12 +195,12 @@ export default function SearchPage() {
                 </div>
 
                 {/* Code */}
-                <div style={{ background: "#0d0d14" }}>
+                <div style={{ background: "var(--code-bg)" }}>
                   <pre className="overflow-x-auto p-4 text-[12.5px] leading-relaxed">
-                    <code className="font-mono" style={{ color: "#c9d1d9" }}>
+                    <code className="font-mono" style={{ color: "var(--text-secondary)" }}>
                       {result.chunk.content.slice(0, 600)}
                       {result.chunk.content.length > 600 && (
-                        <span style={{ color: "#6e7681" }}>…</span>
+                        <span style={{ color: "var(--text-muted)" }}>…</span>
                       )}
                     </code>
                   </pre>

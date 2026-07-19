@@ -23,22 +23,8 @@ export function RepoSelector() {
   return (
     <Select.Root value={selectedRepoId ?? undefined} onValueChange={setSelectedRepo}>
       <Select.Trigger
-        className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] font-medium outline-none transition-all duration-150"
-        style={{
-          background: "transparent",
-          border: "1px solid transparent",
-          color: "var(--text-secondary)",
-        }}
-        onMouseEnter={(e) => {
-          const el = e.currentTarget as HTMLButtonElement;
-          el.style.background = "var(--surface-3)";
-          el.style.color = "var(--text-primary)";
-        }}
-        onMouseLeave={(e) => {
-          const el = e.currentTarget as HTMLButtonElement;
-          el.style.background = "transparent";
-          el.style.color = "var(--text-secondary)";
-        }}
+        className="hover-surface flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] font-medium outline-none"
+        style={{ color: "var(--text-secondary)" }}
       >
         <FolderGit2 className="size-3.5 shrink-0" style={{ color: "var(--text-tertiary)" }} />
         <Select.Value placeholder="All repositories">

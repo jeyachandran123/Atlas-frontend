@@ -75,7 +75,7 @@ function EmptyState() {
           No repositories yet
         </p>
         <p className="mt-1.5 max-w-xs text-[13px]" style={{ color: "var(--text-tertiary)" }}>
-          Connect your first repository to start asking Atlas about your code.
+          Connect your first repository to start asking UnityWorks about your code.
         </p>
       </div>
       <div className="flex flex-wrap justify-center gap-2">

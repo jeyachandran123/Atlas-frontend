@@ -36,7 +36,7 @@ export function initializeFirebase(): FirebaseApp {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
   } else {
-    app = getApps()[0];
+    app = getApps()[0]!;
     auth = getAuth(app);
   }
   return app;

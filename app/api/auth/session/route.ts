@@ -46,5 +46,3 @@ export async function DELETE() {
   response.cookies.delete(COOKIE_NAME);
   return response;
 }
-
-export { COOKIE_NAME };

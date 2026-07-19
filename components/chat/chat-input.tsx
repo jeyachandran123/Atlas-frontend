@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, type KeyboardEvent } from "react";
-import { ArrowUp, Square, Plus, ChevronDown, Check, Paperclip, Camera, X, FileText, Image } from "lucide-react";
+import { ArrowUp, Square, Plus, ChevronDown, Check, Paperclip, Camera, X, FileText, Image as ImageIcon } from "lucide-react";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { RepoSelector } from "@/components/layout/repo-selector";
 
@@ -90,8 +90,9 @@ export function ChatInput({
       if (!items) return;
       const imageFiles: File[] = [];
       for (let i = 0; i < items.length; i++) {
-        if (items[i].type.startsWith("image/")) {
-          const file = items[i].getAsFile();
+        const item = items[i];
+        if (item?.type.startsWith("image/")) {
+          const file = item.getAsFile();
           if (file) imageFiles.push(file);
         }
       }
@@ -260,22 +261,9 @@ export function ChatInput({
           <div ref={attachRef} className="relative">
             <button
               onClick={() => { setAttachOpen((o) => !o); setAgentOpen(false); }}
-              className="flex size-8 items-center justify-center rounded-lg transition-all duration-150"
-              style={{
-                background: attachOpen ? "var(--surface-3)" : "transparent",
-                color: attachOpen ? "var(--text-primary)" : "var(--text-tertiary)",
-                border: "1px solid transparent",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = "var(--surface-3)";
-                (e.currentTarget as HTMLButtonElement).style.color = "var(--text-primary)";
-              }}
-              onMouseLeave={(e) => {
-                if (!attachOpen) {
-                  (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-                  (e.currentTarget as HTMLButtonElement).style.color = "var(--text-tertiary)";
-                }
-              }}
+              className={`icon-btn size-8 rounded-lg ${attachOpen ? "open" : ""}`}
+              aria-label="Add files or photos"
+              aria-expanded={attachOpen}
               title="Add files or photos (Ctrl+U)"
             >
               <Plus className="size-[18px]" />
@@ -314,22 +302,8 @@ export function ChatInput({
           <div ref={agentRef} className="relative">
             <button
               onClick={() => { setAgentOpen((o) => !o); setAttachOpen(false); }}
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-all duration-150"
-              style={{
-                background: agentOpen ? "var(--surface-3)" : "transparent",
-                color: "var(--text-secondary)",
-                border: "1px solid transparent",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = "var(--surface-3)";
-                (e.currentTarget as HTMLButtonElement).style.color = "var(--text-primary)";
-              }}
-              onMouseLeave={(e) => {
-                if (!agentOpen) {
-                  (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-                  (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)";
-                }
-              }}
+              className={`menu-trigger flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium ${agentOpen ? "open" : ""}`}
+              aria-expanded={agentOpen}
             >
               <span
                 className="size-1.5 rounded-full"
@@ -358,16 +332,7 @@ export function ChatInput({
                     <button
                       key={a.id}
                       onClick={() => switchAgent(a.id)}
-                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors duration-100"
-                      style={{ color: "var(--text-secondary)" }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.background = "var(--surface-3)";
-                        (e.currentTarget as HTMLButtonElement).style.color = "var(--text-primary)";
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-                        (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)";
-                      }}
+                      className="menu-item flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left"
                     >
                       <span
                         className="size-2 shrink-0 rounded-full"
@@ -405,14 +370,12 @@ export function ChatInput({
           {isStreaming ? (
             <button
               onClick={onStop}
-              className="flex size-8 items-center justify-center rounded-xl transition-all duration-150"
+              aria-label="Stop generating"
+              className="hover-danger flex size-8 items-center justify-center rounded-xl"
               style={{
                 background: "var(--surface-3)",
                 border: "1px solid var(--border-default)",
-                color: "var(--text-secondary)",
               }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--danger)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)"; }}
             >
               <Square className="size-3.5 fill-current" />
             </button>
@@ -420,25 +383,16 @@ export function ChatInput({
             <button
               onClick={submit}
               disabled={!hasContent || disabled}
-              className="flex size-8 items-center justify-center rounded-xl transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-25"
+              aria-label="Send message"
+              className="send-btn flex size-8 items-center justify-center rounded-xl disabled:cursor-not-allowed disabled:opacity-25"
               style={hasContent && !disabled ? {
-                background: "linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%)",
+                background: "var(--accent-gradient)",
                 boxShadow: "var(--shadow-accent-sm), inset 0 1px 0 rgba(255,255,255,0.15)",
                 color: "#fff",
               } : {
                 background: "var(--surface-3)",
                 border: "1px solid var(--border-default)",
                 color: "var(--text-muted)",
-              }}
-              onMouseEnter={(e) => {
-                if (hasContent && !disabled) {
-                  (e.currentTarget as HTMLButtonElement).style.filter = "brightness(1.10)";
-                  (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.filter = "";
-                (e.currentTarget as HTMLButtonElement).style.transform = "";
               }}
             >
               <ArrowUp className="size-4" />
@@ -462,16 +416,7 @@ function AttachMenuItem({
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-100"
-      style={{ color: "var(--text-secondary)" }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.background = "var(--surface-3)";
-        (e.currentTarget as HTMLButtonElement).style.color = "var(--text-primary)";
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-        (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)";
-      }}
+      className="menu-item flex w-full items-center gap-3 px-4 py-3 text-left"
     >
       <span style={{ color: "var(--text-tertiary)" }}>{icon}</span>
       <span className="flex-1 text-[13px] font-medium">{label}</span>
@@ -506,7 +451,7 @@ function FileChip({ af, onRemove }: { af: AttachedFile; onRemove: () => void }) 
         />
       ) : (
         <span style={{ color: "var(--accent-bright)" }}>
-          {isImage ? <Image className="size-4 shrink-0" /> : <FileText className="size-4 shrink-0" />}
+          {isImage ? <ImageIcon className="size-4 shrink-0" /> : <FileText className="size-4 shrink-0" />}
         </span>
       )}
       <div className="min-w-0">
@@ -517,6 +462,7 @@ function FileChip({ af, onRemove }: { af: AttachedFile; onRemove: () => void }) 
       </div>
       <button
         onClick={onRemove}
+        aria-label={`Remove ${af.file.name}`}
         className="ml-1 flex size-4 shrink-0 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100"
         style={{ background: "var(--surface-4)", color: "var(--text-secondary)" }}
       >

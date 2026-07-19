@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { RotateCcw, Share2, Check } from "lucide-react";
+import { RotateCcw, Share2, Check, AlertCircle } from "lucide-react";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { StreamingMessageBubble } from "@/components/chat/streaming-message-bubble";
 import { ChatInput } from "@/components/chat/chat-input";
 import { QuickActions } from "@/components/chat/quick-actions";
-import { useMessages, useStreamChat } from "@/lib/hooks/use-chat";
+import { useMessages, useStreamChat, useConversations } from "@/lib/hooks/use-chat";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useAuthStore } from "@/lib/stores/auth-store";
 
 export function ChatThread() {
   const activeConversationId = useChatStore((s) => s.activeConversationId);
@@ -32,6 +33,10 @@ export function ChatThread() {
   const { data: messages = [], isLoading } = useMessages(activeConversationId);
   const { send, editAndResend, retry, deleteMessage, stop } = useStreamChat();
 
+  // Conversation title for the header (best-effort from the cached list)
+  const { data: convData } = useConversations();
+  const activeTitle = convData?.conversations.find((c) => c.id === activeConversationId)?.title;
+
   function handleRetry(messageId: string, content: string) {
     retry(messageId, content, selectedRepoId ?? undefined);
   }
@@ -47,7 +52,7 @@ export function ChatThread() {
   // Index of the last user message that has no assistant reply after it
   const lastUnansweredUserIdx = (() => {
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "user") {
+      if (messages[i]?.role === "user") {
         // Check if any assistant message exists after this index
         const hasReply = messages.slice(i + 1).some((m) => m.role === "assistant");
         return hasReply ? -1 : i;
@@ -97,24 +102,30 @@ export function ChatThread() {
 
   return (
     <div className="relative flex h-full flex-col">
-      {/* Share button */}
+      {/* Conversation header */}
       {!isEmpty && (
-        <div className="absolute top-4 right-4 z-10">
+        <div
+          className="glass sticky top-0 z-10 flex h-12 shrink-0 items-center justify-between gap-4 px-5"
+          style={{ borderBottom: "1px solid var(--border-subtle)" }}
+        >
+          <p
+            className="truncate text-[13px] font-medium"
+            style={{ color: "var(--text-secondary)", letterSpacing: "-0.01em" }}
+          >
+            {activeTitle || "Conversation"}
+          </p>
           <button
             onClick={handleShareConversation}
             title="Copy conversation"
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-all hover:opacity-80"
-            style={{
-              background: "var(--surface-2, #1e1e2e)",
-              border: "1px solid var(--border, #2d2d3d)",
-              color: copied ? "var(--accent, #6366f1)" : "var(--text-muted, #888)",
-            }}
+            className="ghost-btn flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-medium"
+            style={copied ? { color: "var(--success)" } : undefined}
           >
             {copied ? <Check className="size-3.5" /> : <Share2 className="size-3.5" />}
-            {copied ? "Copied!" : "Share"}
+            {copied ? "Copied" : "Share"}
           </button>
         </div>
       )}
+
       {/* Messages */}
       <div className={`relative flex-1 ${isEmpty ? "overflow-hidden" : "overflow-y-auto"}`}
         ref={scrollRef}
@@ -123,8 +134,8 @@ export function ChatThread() {
         {isEmpty ? (
           <EmptyState onPick={(t) => send(t, selectedRepoId ?? undefined, "auto")} />
         ) : (
-          <div className="mx-auto max-w-[760px] px-6 py-8">
-            <div className="flex flex-col gap-6">
+          <div className="mx-auto max-w-[768px] px-6 py-8">
+            <div className="flex flex-col gap-7">
               {messages.map((m, i) =>
                 <MessageBubble
                   key={m.id}
@@ -151,16 +162,16 @@ export function ChatThread() {
 
               {showStreamError && (
                 <div
-                  className="flex items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm"
+                  className="flex items-center justify-between gap-3 rounded-xl px-4 py-3 text-[13px] animate-fade-in-up"
                   style={{
                     background: "var(--danger-bg)",
                     border: "1px solid var(--danger-border)",
                     color: "var(--danger)",
                   }}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <span className="size-1.5 shrink-0 rounded-full" style={{ background: "var(--danger)" }} />
-                    {streamError}
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <AlertCircle className="size-4 shrink-0" />
+                    <span className="truncate">{streamError}</span>
                   </div>
                   {lastUserMessage && (
                     <button
@@ -168,7 +179,7 @@ export function ChatThread() {
                         const lastMsg = [...messages].reverse().find((m) => m.role === "user");
                         if (lastMsg) handleRetry(lastMsg.id, lastMsg.content);
                       }}
-                      className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] transition-opacity hover:opacity-80"
+                      className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-opacity hover:opacity-80"
                       style={{ background: "var(--danger-border)", color: "var(--danger)" }}
                     >
                       <RotateCcw className="size-3" /> Retry
@@ -184,17 +195,17 @@ export function ChatThread() {
 
       {/* Input */}
       <div
-        className="px-6 pb-6 pt-4"
-        style={{ background: "linear-gradient(to top, var(--canvas) 65%, transparent)" }}
+        className="px-6 pb-5 pt-3"
+        style={{ background: "linear-gradient(to top, var(--canvas) 60%, transparent)" }}
       >
-        <div className="mx-auto max-w-[760px]">
+        <div className="mx-auto max-w-[768px]">
           <ChatInput
             onSend={(msg, files, agentId) => send(msg, selectedRepoId ?? undefined, agentId ?? "auto", files)}
             onStop={stop}
             isStreaming={isActiveStream}
           />
           <p className="mt-2.5 text-center text-[11px]" style={{ color: "var(--text-muted)" }}>
-            Atlas can make mistakes. Verify important information.
+            UnityWorks can make mistakes. Verify important information.
           </p>
         </div>
       </div>
@@ -202,10 +213,21 @@ export function ChatThread() {
   );
 }
 
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 5) return "Working late";
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 function EmptyState({ onPick }: { onPick: (t: string) => void }) {
+  const user = useAuthStore((s) => s.user);
+  const firstName = user?.full_name?.split(" ")[0];
+
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
-      <div className="w-full max-w-[620px] mt-8">
+      <div className="mt-8 w-full max-w-[640px]">
 
         {/* Hero */}
         <div className="mb-10 flex flex-col items-center text-center animate-fade-up">
@@ -214,23 +236,23 @@ function EmptyState({ onPick }: { onPick: (t: string) => void }) {
             <div
               className="absolute inset-0 rounded-3xl blur-2xl"
               style={{
-                background: "linear-gradient(135deg, var(--accent), #7c3aed)",
+                background: "var(--accent-gradient)",
                 transform: "scale(1.7)",
-                opacity: 0.28,
+                opacity: 0.26,
               }}
             />
             <div
-              className="relative flex h-[68px] w-[68px] items-center justify-center rounded-[22px]"
+              className="relative flex h-[64px] w-[64px] items-center justify-center rounded-[20px]"
               style={{
-                background: "linear-gradient(145deg, var(--accent) 0%, #6d28d9 100%)",
+                background: "var(--accent-gradient)",
                 boxShadow: "0 0 0 1px var(--accent-border), 0 12px 40px rgba(99,102,241,0.35), inset 0 1px 0 rgba(255,255,255,0.18)",
               }}
             >
               <div
-                className="absolute inset-0 rounded-[22px]"
+                className="absolute inset-0 rounded-[20px]"
                 style={{ background: "linear-gradient(145deg, rgba(255,255,255,0.14) 0%, transparent 50%)" }}
               />
-              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" className="relative z-10">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="relative z-10">
                 <path d="M12 2L2 7l10 5 10-5-10-5z" fill="white" opacity="0.95" />
                 <path d="M2 17l10 5 10-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.55" />
                 <path d="M2 12l10 5 10-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.85" />
@@ -242,10 +264,10 @@ function EmptyState({ onPick }: { onPick: (t: string) => void }) {
             className="text-[30px] font-semibold"
             style={{ color: "var(--text-primary)", letterSpacing: "-0.035em", lineHeight: 1.15 }}
           >
-            How can I help?
+            {firstName ? `${greeting()}, ${firstName}` : greeting()}
           </h1>
           <p
-            className="mt-3 max-w-[400px] text-[14px] leading-relaxed"
+            className="mt-3 max-w-[420px] text-[14px] leading-relaxed"
             style={{ color: "var(--text-tertiary)" }}
           >
             Ask me anything about your codebase — I read files, search semantically, and check git history.

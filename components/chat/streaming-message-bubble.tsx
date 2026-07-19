@@ -9,7 +9,7 @@ function AtlasAvatar({ streaming }: { streaming?: boolean }) {
     <div
       className="relative flex size-7 shrink-0 items-center justify-center rounded-lg"
       style={{
-        background: "linear-gradient(135deg, var(--accent) 0%, #6d28d9 100%)",
+        background: "var(--accent-gradient)",
         boxShadow: streaming
           ? "0 0 0 2px var(--accent-border), 0 2px 10px rgba(99,102,241,0.40)"
           : "0 2px 8px rgba(99,102,241,0.28), inset 0 1px 0 rgba(255,255,255,0.12)",
@@ -51,14 +51,22 @@ export function StreamingMessageBubble({
             />
           </div>
         ) : !activeToolCall ? (
-          <div className="flex items-center gap-1.5 py-1">
-            {[0, 150, 300].map((delay) => (
-              <span
-                key={delay}
-                className="size-1.5 rounded-full animate-typing-dot"
-                style={{ background: "var(--accent)", animationDelay: `${delay}ms` }}
-              />
-            ))}
+          <div className="flex items-center gap-2.5 py-1" role="status" aria-label="UnityWorks is thinking">
+            <div className="flex items-center gap-1.5">
+              {[0, 150, 300].map((delay) => (
+                <span
+                  key={delay}
+                  className="size-1.5 rounded-full animate-typing-dot"
+                  style={{ background: "var(--accent)", animationDelay: `${delay}ms` }}
+                />
+              ))}
+            </div>
+            <span
+              className="text-[12px] font-medium animate-fade-in"
+              style={{ color: "var(--text-tertiary)", letterSpacing: "-0.01em" }}
+            >
+              Thinking…
+            </span>
           </div>
         ) : null}
       </div>

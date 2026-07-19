@@ -20,27 +20,45 @@ export function CitationsPanel({
   if (citations.length === 0) return null;
 
   return (
-    <div className="mt-3 flex flex-col gap-1.5 border-t border-border-subtle pt-3">
-      <span className="text-xs font-medium text-text-tertiary">
-        Sources ({citations.length})
+    <div
+      className="mt-3 flex flex-col gap-2 pt-3"
+      style={{ borderTop: "1px solid var(--border-subtle)" }}
+    >
+      <span
+        className="text-[10px] font-semibold uppercase"
+        style={{ color: "var(--text-muted)", letterSpacing: "0.08em" }}
+      >
+        Sources · {citations.length}
       </span>
       <div className="flex flex-wrap gap-1.5">
-        {citations.map((citation, i) => (
-          <button
-            key={`${citation.chunk.file_path}-${citation.chunk.start_line}-${i}`}
-            onClick={() => onOpenCitation?.(citation)}
-            className="group flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text-secondary transition-colors hover:border-signal/40 hover:text-text-primary"
-          >
-            <FileCode2 className="size-3 text-text-tertiary group-hover:text-signal" />
-            <span className="font-mono">{truncatePath(citation.chunk.file_path, 2)}</span>
-            <span className="text-text-tertiary">
-              :{citation.chunk.start_line}-{citation.chunk.end_line}
-            </span>
-            <span className="ml-1 rounded bg-surface-overlay px-1 text-[10px] text-text-tertiary">
-              {(citation.score * 100).toFixed(0)}%
-            </span>
-          </button>
-        ))}
+        {citations.map((citation, i) => {
+          const score = Math.round(citation.score * 100);
+          const scoreColor =
+            score >= 80 ? "var(--success)" : score >= 60 ? "var(--accent-bright)" : "var(--text-tertiary)";
+          return (
+            <button
+              key={`${citation.chunk.file_path}-${citation.chunk.start_line}-${i}`}
+              onClick={() => onOpenCitation?.(citation)}
+              className="chip-interactive group flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11.5px]"
+              title={`${citation.chunk.file_path}:${citation.chunk.start_line}–${citation.chunk.end_line}`}
+            >
+              <FileCode2
+                className="size-3 shrink-0 transition-colors"
+                style={{ color: "var(--accent-bright)" }}
+              />
+              <span className="font-mono">{truncatePath(citation.chunk.file_path, 2)}</span>
+              <span style={{ color: "var(--text-muted)" }}>
+                :{citation.chunk.start_line}–{citation.chunk.end_line}
+              </span>
+              <span
+                className="ml-0.5 rounded px-1 font-mono text-[10px] font-medium"
+                style={{ background: "var(--surface-3)", color: scoreColor }}
+              >
+                {score}%
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
