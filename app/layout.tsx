@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { QueryProvider } from "@/app/providers";
+// TypeScript may complain about CSS side-effect imports in some setups.
+// @ts-ignore: CSS module side-effect import
 import "./globals.css";
 
 // Self-hosted variable fonts — every weight renders crisply (no synthetic
