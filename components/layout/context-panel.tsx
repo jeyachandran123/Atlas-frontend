@@ -9,7 +9,7 @@ import {
 import { cn } from "@/lib/utils/cn";
 import { useUIStore } from "@/lib/stores/ui-store";
 import {
-  useConversations, useCreateConversation, useUpdateConversationTitle,
+  useConversations, useUpdateConversationTitle,
   useDeleteConversation, usePinConversation, useUnpinConversation,
 } from "@/lib/hooks/use-chat";
 import { useChatStore } from "@/lib/stores/chat-store";
@@ -62,7 +62,6 @@ export function ContextPanel() {
   const { data } = useConversations(limit, offset);
   const conversations = data?.conversations || [];
   const total = data?.total || 0;
-  const createConversation = useCreateConversation();
   const updateTitle = useUpdateConversationTitle();
   const deleteConv = useDeleteConversation();
   const pinConv = usePinConversation();
@@ -77,13 +76,10 @@ export function ContextPanel() {
   const hasMore = offset + limit < total;
 
   function newChat() {
+    // ChatGPT-style: no conversation is created until the first message.
+    // The backend creates one on first send; the URL adopts it mid-stream.
     setActiveConversation(null);
-    createConversation.mutate(undefined, {
-      onSuccess: (data) => {
-        setActiveConversation(data.id);
-        router.push("/chat");
-      },
-    });
+    router.push("/chat");
   }
 
   useEffect(() => {
@@ -125,7 +121,9 @@ export function ContextPanel() {
         pending={deleteConv.isPending}
         onConfirm={() => {
           if (!deleteTarget) return;
+          const wasActive = deleteTarget.id === activeId;
           deleteConv.mutate(deleteTarget.id, {
+            onSuccess: () => { if (wasActive) router.push("/chat"); },
             onSettled: () => setDeleteTarget(null),
           });
         }}
@@ -135,7 +133,6 @@ export function ContextPanel() {
       <div className="flex items-center gap-1.5 px-2 pb-2 pt-3">
         <button
           onClick={newChat}
-          disabled={createConversation.isPending}
           className="ghost-btn flex h-8 flex-1 items-center gap-2 px-3 text-[12.5px] font-medium"
         >
           <Plus className="size-3.5 shrink-0" style={{ color: "var(--accent-bright)" }} />
@@ -189,7 +186,7 @@ export function ContextPanel() {
                       active={c.id === activeId}
                       editing={editingId === c.id}
                       editTitle={editTitle}
-                      onSelect={() => { setActiveConversation(c.id); router.push("/chat"); }}
+                      onSelect={() => { setActiveConversation(c.id); router.push(`/chat/${c.id}`); }}
                       onStartEdit={() => { setEditingId(c.id); setEditTitle(c.title); }}
                       onSaveEdit={saveEdit}
                       onCancelEdit={() => { setEditingId(null); setEditTitle(""); }}

@@ -185,6 +185,13 @@ export function useStreamChat() {
             // streamError, which would otherwise hide the error banner.)
             if (!activeConversationId && event.conversation_id) {
               setActiveConversation(event.conversation_id);
+              // ChatGPT-style URL adoption: swap /chat → /chat/{id} in place.
+              // history.replaceState avoids a route remount, so the streamed
+              // content and scroll position are untouched; a refresh or a
+              // shared link then lands on the canonical conversation route.
+              if (typeof window !== "undefined" && window.location.pathname === "/chat") {
+                window.history.replaceState(null, "", `/chat/${event.conversation_id}`);
+              }
             }
             const finalConvId = event.conversation_id || activeConversationId;
             if (finalConvId) {

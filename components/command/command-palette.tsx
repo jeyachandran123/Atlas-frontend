@@ -7,7 +7,7 @@ import {
   MessageSquare, FolderGit2, Search as SearchIcon, Settings,
   Plus, FileCode2, ImageIcon, Moon, Sun, Monitor, Loader2, CornerDownLeft,
 } from "lucide-react";
-import { useConversations, useCreateConversation } from "@/lib/hooks/use-chat";
+import { useConversations } from "@/lib/hooks/use-chat";
 import { useRepos } from "@/lib/hooks/use-repos";
 import { useSearch } from "@/lib/hooks/use-search";
 import { useChatStore } from "@/lib/stores/chat-store";
@@ -35,7 +35,6 @@ export function CommandPalette() {
 
   const { data: convData } = useConversations();
   const conversations = convData?.conversations ?? [];
-  const createConversation = useCreateConversation();
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const selectedRepoId = useChatStore((s) => s.selectedRepoId);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
@@ -93,13 +92,10 @@ export function CommandPalette() {
   }
 
   function newChat() {
+    // No API call — the backend creates the conversation on first message
+    // and the URL adopts it (/chat → /chat/{id}) mid-stream.
     setActiveConversation(null);
-    createConversation.mutate(undefined, {
-      onSuccess: (data) => {
-        setActiveConversation(data.id);
-        router.push("/chat");
-      },
-    });
+    router.push("/chat");
   }
 
   const q = query.trim().toLowerCase();
@@ -184,7 +180,7 @@ export function CommandPalette() {
               <Command.Item
                 key={c.id}
                 value={`conv-${c.id}`}
-                onSelect={() => run(() => { setActiveConversation(c.id); router.push("/chat"); })}
+                onSelect={() => run(() => { setActiveConversation(c.id); router.push(`/chat/${c.id}`); })}
                 className="cmdk-item"
               >
                 <MessageSquare className="size-4 shrink-0" style={{ color: "var(--text-tertiary)" }} />
