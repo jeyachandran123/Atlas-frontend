@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   MessageSquare, FolderGit2, Search, Settings,
-  Sun, Moon, Monitor, LogOut, ImageIcon,
+  Sun, Moon, Monitor, LogOut, ImageIcon, BookOpenText,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
@@ -96,6 +96,12 @@ export function IconRail() {
                 aria-hidden
               />
             )}
+          </Link>
+        </Tooltip>
+
+        <Tooltip content="Knowledge AI — documents, Q&A, generation" side="right">
+          <Link href="/knowledge" aria-label="Knowledge AI" className="rail-item-wrap">
+            <RailItem icon={BookOpenText} active={pathname.startsWith("/knowledge")} />
           </Link>
         </Tooltip>
 
