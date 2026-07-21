@@ -28,7 +28,10 @@ async function proxy(
   const hasBody = !NO_BODY_METHODS.has(req.method);
   let body: BodyInit | null = null;
   if (hasBody) {
-    body = await req.text();
+    // Raw bytes, never text — decoding multipart bodies as UTF-8 corrupts
+    // binary uploads (JPEG/PDF/DOCX), which then fail magic-byte validation.
+    const buf = await req.arrayBuffer();
+    body = buf.byteLength > 0 ? buf : null;
   }
 
   const upstream = await fetch(url, {

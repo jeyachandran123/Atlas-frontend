@@ -37,11 +37,12 @@ export function DocumentsPanel({
   const { data } = useQuery({
     queryKey: ["dip-documents"],
     queryFn: () => knowledgeApi.listDocuments(),
-    // Keep polling while any document is still processing (the embedding
-    // pipeline runs in the background after knowledge_ready).
+    // Poll ONLY while a document is actively processing; go quiet otherwise
+    // (uploads/deletes invalidate the query explicitly, so idle polling
+    // buys nothing and spams the API).
     refetchInterval: (q) => {
       const docs = q.state.data?.items ?? [];
-      return docs.some((d) => ACTIVE_STATES.has(d.processing_status)) ? 3000 : 15000;
+      return docs.some((d) => ACTIVE_STATES.has(d.processing_status)) ? 3000 : false;
     },
   });
   const docs = data?.items ?? [];
@@ -55,7 +56,16 @@ export function DocumentsPanel({
   const { data: semanticMap = {} } = useQuery({
     queryKey: ["dip-semantic", readyIds],
     enabled: readyIds.length > 0,
-    refetchInterval: 5000,
+    // Poll only while some ready document is still waiting on its embedding;
+    // once everything is indexed there is nothing to watch — stop entirely.
+    // Capped: a document that never becomes embeddable (e.g. an image with
+    // no extractable text) must not keep the poll alive forever.
+    refetchInterval: (q) => {
+      const map = q.state.data;
+      if (map && Object.values(map).every(Boolean)) return false;
+      if (q.state.dataUpdateCount > 60) return false;
+      return 5000;
+    },
     queryFn: async () => {
       const map: Record<string, boolean> = {};
       await Promise.all(
