@@ -99,9 +99,9 @@ export function IconRail() {
           </Link>
         </Tooltip>
 
-        <Tooltip content="Knowledge AI — documents, Q&A, generation" side="right">
-          <Link href="/knowledge" aria-label="Knowledge AI" className="rail-item-wrap">
-            <RailItem icon={BookOpenText} active={pathname.startsWith("/knowledge")} />
+        <Tooltip content="Workspace — documents, conversations, generation" side="right">
+          <Link href="/w" aria-label="Workspace" className="rail-item-wrap">
+            <RailItem icon={BookOpenText} active={pathname.startsWith("/w") || pathname.startsWith("/knowledge")} />
           </Link>
         </Tooltip>
 
