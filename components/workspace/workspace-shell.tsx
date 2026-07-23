@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
 import { WorkspaceContextPanel } from "@/components/workspace/workspace-context-panel";
+import { DocumentViewer } from "@/components/workspace/document-viewer";
+import { OperationsTray } from "@/components/workspace/operations-tray";
 import { useWorkspaces } from "@/lib/hooks/use-workspace";
 import { useWorkspaceStore } from "@/lib/stores/workspace-store";
 
@@ -45,6 +47,10 @@ export function WorkspaceShell({
       <WorkspaceSidebar workspace={workspace} />
       <main className="flex min-w-0 flex-1 flex-col">{children}</main>
       <WorkspaceContextPanel workspace={workspace} />
+      {/* One viewer + one operations tray for the whole workspace — mounted
+          at the shell so they survive page navigation within the workspace. */}
+      <DocumentViewer />
+      <OperationsTray />
     </div>
   );
 }

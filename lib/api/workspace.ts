@@ -86,8 +86,38 @@ export const workspaceApi = {
     return { url: URL.createObjectURL(blob), filename };
   },
 
-  deleteDocument: (documentId: string) =>
-    knowledgeApi.deleteDocument(documentId),
+  /** Complete workspace-layer document deletion (purges vectors, embeddings,
+   *  knowledge, links, bookmarks — no orphans). Replaces the frozen soft-delete. */
+  deleteDocument: (workspaceId: string, documentId: string) =>
+    api.delete<{ vectors_removed: number; bookmarks_removed: number }>(
+      `/workspaces/${workspaceId}/documents/${documentId}`),
+
+  /**
+   * Fetch a document/artifact as an inline blob URL for the in-app viewer.
+   * Served by the workspace *content* endpoints, which stream bytes inline
+   * through the API (same origin). This deliberately avoids the download
+   * endpoints' S3 signed URLs — the browser cannot fetch() those without
+   * bucket CORS, which is exactly why the viewer failed to load. Same-origin
+   * bytes have no CORS constraint. Returns text for text/markdown/html.
+   */
+  fetchViewable: async (
+    kind: "document" | "artifact", id: string, workspaceId: string,
+  ): Promise<{ blobUrl: string; mime: string; text: string | null }> => {
+    const token = getAccessToken();
+    const path = kind === "artifact"
+      ? `/workspaces/${workspaceId}/artifacts/${id}/content`
+      : `/workspaces/${workspaceId}/documents/${id}/content`;
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`Could not load (${res.status})`);
+    const blob = await res.blob();
+    // The header content-type is authoritative here (blob.type mirrors it).
+    const mime = res.headers.get("content-type")?.split(";")[0] || blob.type || "application/octet-stream";
+    const textLike = /^(text\/|application\/(json|xml)|.*markdown|.*html)/i.test(mime);
+    const text = textLike ? await blob.text() : null;
+    return { blobUrl: URL.createObjectURL(blob), mime, text };
+  },
 
   // ── Conversations ──────────────────────────────────────────────────────────
   conversations: (id: string) =>

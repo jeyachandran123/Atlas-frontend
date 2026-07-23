@@ -12,11 +12,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { BookmarkButton } from "@/components/workspace/bookmark-button";
 import { workspaceApi } from "@/lib/api/workspace";
 import {
-  useWorkspaceArtifacts, useWorkspaceBookmarks, useWorkspaceDashboard,
+  useDeleteBookmark, useWorkspaceArtifacts, useWorkspaceBookmarks, useWorkspaceDashboard,
   useWorkspaceDocuments, useWorkspaceTimeline,
 } from "@/lib/hooks/use-workspace";
+import { useOperationsStore } from "@/lib/stores/operations-store";
+import { useViewerStore } from "@/lib/stores/viewer-store";
 import type { Workspace, WorkspaceDocument } from "@/types/workspace";
 
 const TABS = ["overview", "documents", "generated", "bookmarks", "timeline"] as const;
@@ -53,7 +56,7 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
     if (!pendingDelete) return;
     setDeleting(true);
     try {
-      await workspaceApi.deleteDocument(pendingDelete.id);
+      await workspaceApi.deleteDocument(wsId, pendingDelete.id);
       toast.success(`${pendingDelete.filename} deleted`);
       qc.invalidateQueries({ queryKey: ["workspace-documents", wsId] });
       qc.invalidateQueries({ queryKey: ["workspace-dashboard", wsId] });
@@ -78,14 +81,35 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
     }
   }, [dashboard, wsId, qc]);
 
+  const startOp = useOperationsStore((s) => s.start);
+  const updateOp = useOperationsStore((s) => s.update);
+  const finishOp = useOperationsStore((s) => s.finish);
+  const openViewer = useViewerStore((s) => s.open);
+  const deleteBookmark = useDeleteBookmark(wsId);
+
+  function openBookmark(b: { target_type: string; target_id: string; note: string | null }) {
+    if (b.target_type === "conversation") {
+      router.push(`/w/${wsId}/c/${b.target_id}`);
+    } else if (b.target_type === "document") {
+      const doc = documents.find((d) => d.id === b.target_id);
+      openViewer({ kind: "document", id: b.target_id, workspaceId: wsId, title: b.note ?? doc?.filename ?? "Document", filename: doc?.filename ?? b.note ?? "document", extension: doc?.extension });
+    } else if (b.target_type === "artifact") {
+      const art = artifacts.find((a) => a.id === b.target_id);
+      openViewer({ kind: "artifact", id: b.target_id, workspaceId: wsId, title: b.note ?? art?.title ?? "Artifact", filename: art?.filename ?? "artifact", extension: art?.format });
+    }
+  }
+
   async function upload(files: FileList | null) {
     if (!files?.length) return;
     setUploading(true);
     for (const file of Array.from(files)) {
+      const opId = startOp({ kind: "upload", label: file.name, status: "uploading", workspaceId: wsId });
       try {
         const { document } = await workspaceApi.uploadDocument(wsId, file);
-        toast.success(`${document.filename} uploaded`);
+        // Hand off to the tray poller — progress now survives navigation.
+        updateOp(opId, { status: "processing", documentId: document.id });
       } catch (e) {
+        finishOp(opId, "failed", e instanceof Error ? e.message : undefined);
         toast.error(e instanceof Error ? e.message : "Upload failed");
       }
     }
@@ -222,7 +246,8 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
                     <span className="min-w-0 flex-1 truncate text-[13px]" style={{ color: "var(--text-primary)" }}>{d.filename}</span>
                     <DocStatus status={d.processing_status} />
                     <span className="shrink-0 text-[11px]" style={{ color: "var(--text-muted)" }}>{(d.size_bytes / 1024).toFixed(0)} KB</span>
-                    <DocumentActions document={d} onRequestDelete={() => setPendingDelete(d)} />
+                    <BookmarkButton workspaceId={wsId} targetType="document" targetId={d.id} note={d.filename} compact />
+                    <DocumentActions workspaceId={wsId} document={d} onRequestDelete={() => setPendingDelete(d)} />
                   </div>
                 ))}
               </div>
@@ -237,11 +262,18 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
             ) : (
               <div className="flex flex-col gap-1.5">
                 {artifacts.map((a) => (
-                  <div key={a.id} className="flex items-center gap-3 rounded-lg px-3.5 py-2.5"
+                  <div key={a.id} className="group flex items-center gap-3 rounded-lg px-3.5 py-2.5"
                     style={{ background: "var(--surface-1)", border: "1px solid var(--border-subtle)" }}>
                     <Sparkles className="size-4 shrink-0" style={{ color: "var(--text-muted)" }} />
-                    <span className="min-w-0 flex-1 truncate text-[13px]" style={{ color: "var(--text-primary)" }}>{a.title || a.filename}</span>
+                    <button
+                      onClick={() => a.status === "ready" && openViewer({ kind: "artifact", id: a.id, workspaceId: wsId, title: a.title || a.filename, filename: a.filename, extension: a.format })}
+                      className="min-w-0 flex-1 truncate text-left text-[13px]"
+                      style={{ color: "var(--text-primary)", cursor: a.status === "ready" ? "pointer" : "default" }}
+                      title={a.status === "ready" ? "View" : undefined}>
+                      {a.title || a.filename}
+                    </button>
                     <Badge variant="default">{a.format}</Badge>
+                    <BookmarkButton workspaceId={wsId} targetType="artifact" targetId={a.id} note={a.title || a.filename} compact />
                     {a.status === "ready" ? (
                       <button onClick={() => download(a.id)} aria-label="Download"><Download className="size-4" style={{ color: "var(--accent)" }} /></button>
                     ) : (
@@ -261,13 +293,19 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
             ) : (
               <div className="flex flex-col gap-1.5">
                 {bookmarks.map((b) => (
-                  <div key={b.id} className="flex items-center gap-3 rounded-lg px-3.5 py-2.5"
+                  <div key={b.id} className="group flex items-center gap-3 rounded-lg px-3.5 py-2.5 transition-colors hover:bg-[var(--surface-2)]"
                     style={{ background: "var(--surface-1)", border: "1px solid var(--border-subtle)" }}>
                     <Star className="size-4 shrink-0" style={{ color: "var(--accent)" }} />
-                    <span className="min-w-0 flex-1 truncate text-[13px]" style={{ color: "var(--text-primary)" }}>
+                    <button onClick={() => openBookmark(b)}
+                      className="min-w-0 flex-1 truncate text-left text-[13px]" style={{ color: "var(--text-primary)" }}>
                       {b.note || `${b.target_type} · ${b.target_id.slice(0, 8)}`}
-                    </span>
+                    </button>
                     <Badge variant="default">{b.target_type}</Badge>
+                    <button onClick={() => deleteBookmark.mutate(b.id)} aria-label="Remove bookmark"
+                      className="rounded-md p-1 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[var(--surface-3)]"
+                      style={{ color: "var(--text-muted)" }}>
+                      <Trash2 className="size-3.5" />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -311,19 +349,18 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
 }
 
 function DocumentActions({
+  workspaceId,
   document: d,
   onRequestDelete,
 }: {
+  workspaceId: string;
   document: WorkspaceDocument;
   onRequestDelete: () => void;
 }) {
-  async function view() {
-    try {
-      const { url } = await workspaceApi.documentUrl(d.id);
-      window.open(url, "_blank");
-    } catch {
-      toast.error("Could not open document");
-    }
+  const openViewer = useViewerStore((s) => s.open);
+
+  function view() {
+    openViewer({ kind: "document", id: d.id, workspaceId, title: d.filename, filename: d.filename, extension: d.extension });
   }
 
   async function download() {

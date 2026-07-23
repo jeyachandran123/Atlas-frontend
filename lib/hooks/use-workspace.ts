@@ -101,3 +101,26 @@ export function useDeleteConversation(workspaceId: string) {
     },
   });
 }
+
+export function useAddBookmark(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { target_type: string; target_id: string; note?: string }) =>
+      workspaceApi.addBookmark(workspaceId, v.target_type, v.target_id, v.note),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["workspace-bookmarks", workspaceId] });
+      qc.invalidateQueries({ queryKey: ["workspace-dashboard", workspaceId] });
+    },
+  });
+}
+
+export function useDeleteBookmark(workspaceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (bookmarkId: string) => workspaceApi.deleteBookmark(workspaceId, bookmarkId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["workspace-bookmarks", workspaceId] });
+      qc.invalidateQueries({ queryKey: ["workspace-dashboard", workspaceId] });
+    },
+  });
+}

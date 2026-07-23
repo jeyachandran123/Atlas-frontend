@@ -7,6 +7,7 @@ import { workspaceApi } from "@/lib/api/workspace";
 import {
   useWorkspaceArtifacts, useWorkspaceDashboard, useWorkspaceDocuments,
 } from "@/lib/hooks/use-workspace";
+import { useViewerStore } from "@/lib/stores/viewer-store";
 import type { Workspace } from "@/types/workspace";
 
 function relTime(iso: string): string {
@@ -23,6 +24,7 @@ export function WorkspaceContextPanel({ workspace }: { workspace: Workspace }) {
   const { data: dashboard } = useWorkspaceDashboard(wsId);
   const { data: documents = [] } = useWorkspaceDocuments(wsId);
   const { data: artifacts = [] } = useWorkspaceArtifacts(wsId);
+  const openViewer = useViewerStore((s) => s.open);
 
   const inConversation = pathname.includes("/c/");
 
@@ -57,13 +59,15 @@ export function WorkspaceContextPanel({ workspace }: { workspace: Workspace }) {
         ) : (
           <div className="flex flex-col gap-1">
             {documents.slice(0, 8).map((d) => (
-              <div key={d.id} className="flex items-center gap-2 text-[12px]" style={{ color: "var(--text-secondary)" }}>
+              <button key={d.id} onClick={() => openViewer({ kind: "document", id: d.id, workspaceId: wsId, title: d.filename, filename: d.filename, extension: d.extension })}
+                className="flex items-center gap-2 rounded px-1 py-0.5 text-left text-[12px] transition-colors hover:bg-[var(--surface-2)]"
+                style={{ color: "var(--text-secondary)" }}>
                 <FileText className="size-3.5 shrink-0" style={{ color: "var(--text-muted)" }} />
                 <span className="min-w-0 flex-1 truncate" title={d.filename}>{d.filename}</span>
                 {d.processing_status === "knowledge_ready" && (
                   <span className="size-1.5 shrink-0 rounded-full" style={{ background: "var(--status-ready)" }} />
                 )}
-              </div>
+              </button>
             ))}
           </div>
         )}

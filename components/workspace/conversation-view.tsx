@@ -14,9 +14,12 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { MessageMarkdown } from "@/components/chat/message-markdown";
 import { ASK_STAGE_LABELS, StageIndicator } from "@/components/knowledge/stage-indicator";
+import { BookmarkButton } from "@/components/workspace/bookmark-button";
 import { GenerateDialog } from "@/components/workspace/generate-dialog";
 import { streamWorkspaceAsk, workspaceApi } from "@/lib/api/workspace";
 import { useDeleteConversation, useWorkspaceDocuments } from "@/lib/hooks/use-workspace";
+import { useOperationsStore } from "@/lib/stores/operations-store";
+import { useViewerStore } from "@/lib/stores/viewer-store";
 import type { Citation } from "@/types/workspace";
 
 interface TurnView {
@@ -27,6 +30,7 @@ interface TurnView {
   citations: Citation[];
   refusalReason: string | null;
   error: string | null;
+  turnId?: string;   // from the stream `meta` event — bookmark target
 }
 
 interface CtxDoc {
@@ -61,6 +65,10 @@ export function ConversationView({
   const qc = useQueryClient();
   const router = useRouter();
   const deleteConv = useDeleteConversation(workspaceId);
+  const openViewer = useViewerStore((s) => s.open);
+  const startOp = useOperationsStore((s) => s.start);
+  const updateOp = useOperationsStore((s) => s.update);
+  const finishOp = useOperationsStore((s) => s.finish);
 
   const [turns, setTurns] = useState<TurnView[]>([]);
   const [contextDocs, setContextDocs] = useState<CtxDoc[]>([]);
@@ -151,7 +159,9 @@ export function ConversationView({
       (e) => {
         const patchLast = (patch: Partial<TurnView>) =>
           setTurns((t) => t.map((turn, i) => (i === t.length - 1 ? { ...turn, ...patch } : turn)));
-        if (e.event === "stage") {
+        if (e.event === "meta") {
+          patchLast({ turnId: e.data.turn_id });
+        } else if (e.event === "stage") {
           setStages((p) => (p.includes(e.data.stage) ? p : [...p, e.data.stage]));
           setCurrent(e.data.stage);
         } else if (e.event === "token") {
@@ -184,14 +194,17 @@ export function ConversationView({
       if (!files?.length) return;
       setUploading(true);
       for (const file of Array.from(files)) {
+        const opId = startOp({ kind: "upload", label: file.name, status: "uploading", workspaceId });
         try {
           const { document } = await workspaceApi.uploadDocument(workspaceId, file, conversationId);
+          updateOp(opId, { status: "processing", documentId: document.id });
           setContextDocs((prev) =>
             prev.some((d) => d.id === document.id)
               ? prev
               : [...prev, { id: document.id, filename: document.filename, initialStatus: document.processing_status }]);
           toast.success(`${document.filename} added — processing…`);
         } catch (e) {
+          finishOp(opId, "failed", e instanceof Error ? e.message : undefined);
           toast.error(e instanceof Error ? e.message : "Upload failed");
         }
       }
@@ -201,7 +214,7 @@ export function ConversationView({
       qc.invalidateQueries({ queryKey: ["workspace-dashboard", workspaceId] });
       qc.invalidateQueries({ queryKey: ["workspace-timeline", workspaceId] });
     },
-    [workspaceId, conversationId, qc],
+    [workspaceId, conversationId, qc, startOp, updateOp, finishOp],
   );
 
   // Remove a document from THIS conversation only (issue 9) — stays in workspace.
@@ -281,6 +294,8 @@ export function ConversationView({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          <BookmarkButton workspaceId={workspaceId} targetType="conversation" targetId={conversationId}
+            note={title || "Conversation"} label="Bookmark" />
           <Button size="sm" variant="ghost" onClick={saveAsKnowledge} disabled={saving || !turns.length}>
             {saving ? <Loader2 className="animate-spin" /> : <BookMarked />} Save as knowledge
           </Button>
@@ -327,7 +342,10 @@ export function ConversationView({
                 style={{ background: "var(--surface-overlay)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
                 {processing && <Loader2 className="size-3 animate-spin" style={{ color: "var(--accent)" }} />}
                 {status === READY && <span className="size-1.5 rounded-full" style={{ background: "var(--status-ready)" }} />}
-                <span className="max-w-[180px] truncate" title={d.filename}>{d.filename}</span>
+                <button className="max-w-[180px] truncate hover:underline" title={`View ${d.filename}`}
+                  onClick={() => openViewer({ kind: "document", id: d.id, workspaceId, title: d.filename, filename: d.filename })}>
+                  {d.filename}
+                </button>
                 <button onClick={() => removeContextDoc(d.id)} aria-label={`Remove ${d.filename}`}
                   className="rounded-full p-0.5 opacity-40 transition-opacity hover:opacity-100">
                   <X className="size-3" />
@@ -378,6 +396,11 @@ export function ConversationView({
                         </Badge>
                       )}
                       <CitationChips citations={turn.citations} />
+                      {(turn.turnId ?? turn.id) && turn.answer && (
+                        <BookmarkButton workspaceId={workspaceId} targetType="answer"
+                          targetId={(turn.turnId ?? turn.id)!}
+                          note={turn.question.slice(0, 80)} label="Bookmark" />
+                      )}
                     </div>
                   )}
                 </div>

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Loader2, MessageSquare, Search, Sparkles, X } from "lucide-react";
 import { workspaceApi } from "@/lib/api/workspace";
+import { useViewerStore } from "@/lib/stores/viewer-store";
 import type { WorkspaceSearchResults } from "@/types/workspace";
 
 export function WorkspaceSearch({
@@ -14,6 +15,7 @@ export function WorkspaceSearch({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const openViewer = useViewerStore((s) => s.open);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<WorkspaceSearchResults | null>(null);
   const [loading, setLoading] = useState(false);
@@ -46,6 +48,16 @@ export function WorkspaceSearch({
 
   function goConversation(conversationId: string) {
     router.push(`/w/${workspaceId}/c/${conversationId}`);
+    onClose();
+  }
+
+  function viewDocument(id: string, filename: string) {
+    openViewer({ kind: "document", id, workspaceId, title: filename, filename });
+    onClose();
+  }
+
+  function viewArtifact(id: string, title: string, filename: string, format: string) {
+    openViewer({ kind: "artifact", id, workspaceId, title: title || filename, filename, extension: format });
     onClose();
   }
 
@@ -134,17 +146,19 @@ export function WorkspaceSearch({
           ))}
 
           {results?.documents.map((doc) => (
-            <div key={doc.id} className="flex items-center gap-2.5 rounded-lg px-3 py-2">
+            <button key={doc.id} onClick={() => viewDocument(doc.id, doc.filename)}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--surface-3)]">
               <FileText className="size-4 shrink-0" style={{ color: "var(--text-muted)" }} />
               <span className="truncate text-[12.5px]" style={{ color: "var(--text-primary)" }}>{doc.filename}</span>
-            </div>
+            </button>
           ))}
 
           {results?.artifacts.map((a) => (
-            <div key={a.id} className="flex items-center gap-2.5 rounded-lg px-3 py-2">
+            <button key={a.id} onClick={() => viewArtifact(a.id, a.title, a.filename, a.format)}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--surface-3)]">
               <Sparkles className="size-4 shrink-0" style={{ color: "var(--text-muted)" }} />
               <span className="truncate text-[12.5px]" style={{ color: "var(--text-primary)" }}>{a.title || a.filename}</span>
-            </div>
+            </button>
           ))}
         </div>
       </div>
