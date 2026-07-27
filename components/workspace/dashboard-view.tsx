@@ -15,12 +15,13 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { BookmarkButton } from "@/components/workspace/bookmark-button";
 import { workspaceApi } from "@/lib/api/workspace";
 import {
-  useDeleteBookmark, useWorkspaceArtifacts, useWorkspaceBookmarks, useWorkspaceDashboard,
-  useWorkspaceDocuments, useWorkspaceTimeline,
+  useAddBookmark, useDeleteBookmark, useWorkspaceArtifacts, useWorkspaceBookmarks,
+  useWorkspaceDashboard, useWorkspaceDocuments, useWorkspaceTimeline,
 } from "@/lib/hooks/use-workspace";
 import { useOperationsStore } from "@/lib/stores/operations-store";
+import { useUploadConfirmStore } from "@/lib/stores/upload-confirm-store";
 import { useViewerStore } from "@/lib/stores/viewer-store";
-import type { Workspace, WorkspaceDocument } from "@/types/workspace";
+import type { Workspace, WorkspaceArtifact, WorkspaceDocument } from "@/types/workspace";
 
 const TABS = ["overview", "documents", "generated", "bookmarks", "timeline"] as const;
 type Tab = (typeof TABS)[number];
@@ -51,6 +52,8 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
   const [uploading, setUploading] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<WorkspaceDocument | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [pendingDeleteArtifact, setPendingDeleteArtifact] = useState<WorkspaceArtifact | null>(null);
+  const [deletingArtifact, setDeletingArtifact] = useState(false);
 
   async function confirmDeleteDocument() {
     if (!pendingDelete) return;
@@ -66,6 +69,24 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
       toast.error("Failed to delete document");
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function confirmDeleteArtifact() {
+    if (!pendingDeleteArtifact) return;
+    setDeletingArtifact(true);
+    try {
+      await workspaceApi.deleteArtifact(wsId, pendingDeleteArtifact.id);
+      toast.success("Generated document deleted");
+      qc.invalidateQueries({ queryKey: ["workspace-artifacts", wsId] });
+      qc.invalidateQueries({ queryKey: ["workspace-dashboard", wsId] });
+      qc.invalidateQueries({ queryKey: ["workspace-timeline", wsId] });
+      qc.invalidateQueries({ queryKey: ["workspace-bookmarks", wsId] });
+      setPendingDeleteArtifact(null);
+    } catch {
+      toast.error("Failed to delete document");
+    } finally {
+      setDeletingArtifact(false);
     }
   }
 
@@ -85,6 +106,7 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
   const updateOp = useOperationsStore((s) => s.update);
   const finishOp = useOperationsStore((s) => s.finish);
   const openViewer = useViewerStore((s) => s.open);
+  const requestUpload = useUploadConfirmStore((s) => s.request);
   const deleteBookmark = useDeleteBookmark(wsId);
 
   function openBookmark(b: { target_type: string; target_id: string; note: string | null }) {
@@ -99,10 +121,9 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
     }
   }
 
-  async function upload(files: FileList | null) {
-    if (!files?.length) return;
+  async function runUpload(files: File[]) {
     setUploading(true);
-    for (const file of Array.from(files)) {
+    for (const file of files) {
       const opId = startOp({ kind: "upload", label: file.name, status: "uploading", workspaceId: wsId });
       try {
         const { document } = await workspaceApi.uploadDocument(wsId, file);
@@ -120,14 +141,15 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
     qc.invalidateQueries({ queryKey: ["workspace-timeline", wsId] });
   }
 
+  function upload(files: FileList | null) {
+    if (!files?.length) return;
+    // Confirmation prevents accidental uploads (reusable, "don't ask again").
+    requestUpload({ files: Array.from(files), workspaceName: workspace.name, onConfirm: runUpload });
+  }
+
   async function newConversation() {
     const conv = await workspaceApi.startConversation(wsId);
     router.push(`/w/${wsId}/c/${conv.conversation_id}`);
-  }
-
-  async function download(id: string) {
-    const { url } = await workspaceApi.downloadArtifact(id);
-    window.open(url, "_blank");
   }
 
   function setTab(t: Tab) {
@@ -273,12 +295,10 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
                       {a.title || a.filename}
                     </button>
                     <Badge variant="default">{a.format}</Badge>
-                    <BookmarkButton workspaceId={wsId} targetType="artifact" targetId={a.id} note={a.title || a.filename} compact />
-                    {a.status === "ready" ? (
-                      <button onClick={() => download(a.id)} aria-label="Download"><Download className="size-4" style={{ color: "var(--accent)" }} /></button>
-                    ) : (
+                    {a.status !== "ready" && (
                       <Badge variant={a.status === "failed" ? "error" : "pending"}>{a.status}</Badge>
                     )}
+                    <ArtifactActions workspaceId={wsId} artifact={a} onRequestDelete={() => setPendingDeleteArtifact(a)} />
                   </div>
                 ))}
               </div>
@@ -344,7 +364,98 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
         pending={deleting}
         onConfirm={confirmDeleteDocument}
       />
+
+      <ConfirmDialog
+        open={!!pendingDeleteArtifact}
+        onOpenChange={(o) => !o && setPendingDeleteArtifact(null)}
+        title="Delete generated document?"
+        description={`“${pendingDeleteArtifact?.title || pendingDeleteArtifact?.filename || "This document"}” and its stored file, registry record, timeline references and bookmarks will be permanently removed. This cannot be undone.`}
+        confirmLabel="Delete"
+        pending={deletingArtifact}
+        onConfirm={confirmDeleteArtifact}
+      />
     </div>
+  );
+}
+
+function ArtifactActions({
+  workspaceId,
+  artifact: a,
+  onRequestDelete,
+}: {
+  workspaceId: string;
+  artifact: WorkspaceArtifact;
+  onRequestDelete: () => void;
+}) {
+  const qc = useQueryClient();
+  const openViewer = useViewerStore((s) => s.open);
+  const addBookmark = useAddBookmark(workspaceId);
+  const ready = a.status === "ready";
+
+  function view() {
+    openViewer({ kind: "artifact", id: a.id, workspaceId, title: a.title || a.filename, filename: a.filename, extension: a.format });
+    void workspaceApi.recordArtifactEvent(workspaceId, a.id, "viewed");
+    qc.invalidateQueries({ queryKey: ["workspace-timeline", workspaceId] });
+  }
+
+  async function download() {
+    try {
+      const { url, filename } = await workspaceApi.downloadArtifact(a.id);
+      const el = window.document.createElement("a");
+      el.href = url;
+      el.download = filename || a.filename;
+      window.document.body.appendChild(el);
+      el.click();
+      el.remove();
+      void workspaceApi.recordArtifactEvent(workspaceId, a.id, "downloaded");
+      qc.invalidateQueries({ queryKey: ["workspace-timeline", workspaceId] });
+    } catch {
+      toast.error("Download failed");
+    }
+  }
+
+  function bookmark() {
+    addBookmark.mutate(
+      { target_type: "artifact", target_id: a.id, note: a.title || a.filename },
+      { onSuccess: () => toast.success("Bookmarked"), onError: () => toast.error("Could not bookmark") },
+    );
+  }
+
+  const itemClass = "flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] outline-none transition-colors data-[highlighted]:bg-[var(--surface-3)]";
+
+  return (
+    <Dropdown.Root>
+      <Dropdown.Trigger asChild>
+        <button aria-label="Generated document actions"
+          className="rounded-md p-1 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[var(--surface-3)]"
+          style={{ color: "var(--text-muted)" }}>
+          <MoreHorizontal className="size-4" />
+        </button>
+      </Dropdown.Trigger>
+      <Dropdown.Portal>
+        <Dropdown.Content align="end" sideOffset={6}
+          className="z-50 w-40 overflow-hidden rounded-xl p-1.5 animate-scale-up"
+          style={{ background: "var(--surface-overlay)", backdropFilter: "blur(24px)", border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-xl)" }}>
+          {ready && (
+            <>
+              <Dropdown.Item onSelect={view} className={itemClass} style={{ color: "var(--text-primary)" }}>
+                <Eye className="size-4" /> View
+              </Dropdown.Item>
+              <Dropdown.Item onSelect={download} className={itemClass} style={{ color: "var(--text-primary)" }}>
+                <Download className="size-4" /> Download
+              </Dropdown.Item>
+            </>
+          )}
+          <Dropdown.Item onSelect={bookmark} className={itemClass} style={{ color: "var(--text-primary)" }}>
+            <Star className="size-4" /> Bookmark
+          </Dropdown.Item>
+          <div className="my-1 h-px" style={{ background: "var(--border-subtle)" }} />
+          <Dropdown.Item onSelect={onRequestDelete} className={itemClass} style={{ color: "var(--status-error)" }}>
+            <Trash2 className="size-4" /> Delete
+          </Dropdown.Item>
+        </Dropdown.Content>
+      </Dropdown.Portal>
+    </Dropdown.Root>
   );
 }
 

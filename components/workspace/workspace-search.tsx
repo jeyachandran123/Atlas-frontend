@@ -58,7 +58,20 @@ export function WorkspaceSearch({
 
   function viewArtifact(id: string, title: string, filename: string, format: string) {
     openViewer({ kind: "artifact", id, workspaceId, title: title || filename, filename, extension: format });
+    void workspaceApi.recordArtifactEvent(workspaceId, id, "viewed");
     onClose();
+  }
+
+  /** A generated-document hit opens the conversation it lives in and scrolls to
+   *  its message (via #gen-<id>). If it wasn't generated from a conversation,
+   *  fall back to opening the document in the viewer. */
+  function openArtifact(a: WorkspaceSearchResults["artifacts"][number]) {
+    if (a.conversation_id) {
+      router.push(`/w/${workspaceId}/c/${a.conversation_id}#gen-${a.id}`);
+      onClose();
+    } else {
+      viewArtifact(a.id, a.title, a.filename, a.format);
+    }
   }
 
   const hasResults =
@@ -154,7 +167,7 @@ export function WorkspaceSearch({
           ))}
 
           {results?.artifacts.map((a) => (
-            <button key={a.id} onClick={() => viewArtifact(a.id, a.title, a.filename, a.format)}
+            <button key={a.id} onClick={() => openArtifact(a)}
               className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--surface-3)]">
               <Sparkles className="size-4 shrink-0" style={{ color: "var(--text-muted)" }} />
               <span className="truncate text-[12.5px]" style={{ color: "var(--text-primary)" }}>{a.title || a.filename}</span>

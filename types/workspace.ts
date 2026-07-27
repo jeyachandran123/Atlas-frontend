@@ -19,10 +19,13 @@ export interface WorkspaceDocument {
   created_at: string;
 }
 
+export type RetrievalMode = "all" | "selected";
+
 export interface WorkspaceConversation {
   conversation_id: string;
   title: string;
   title_generated: boolean;
+  retrieval_mode: RetrievalMode;
   created_at: string;
   updated_at: string;
 }
@@ -35,6 +38,23 @@ export interface WorkspaceArtifact {
   status: string;
   size_bytes: number;
   grounded: boolean;
+  conversation_id: string | null;
+  created_at: string;
+  prompt?: string;
+  error?: string | null;
+}
+
+/** A generated document as it appears inside the conversation timeline. */
+export interface ConversationArtifact {
+  id: string;
+  title: string;
+  filename: string;
+  format: string;
+  status: string;
+  prompt: string;
+  size_bytes: number;
+  grounded: boolean;
+  error: string | null;
   conversation_id: string | null;
   created_at: string;
 }
@@ -83,10 +103,11 @@ export interface RestoreTurn {
 export interface ConversationRestore {
   conversation_id: string;
   title: string;
+  retrieval_mode: RetrievalMode;
   correlation_id: string;
   turns: RestoreTurn[];
   documents: WorkspaceDocument[];
-  artifacts: WorkspaceArtifact[];
+  artifacts: ConversationArtifact[];
 }
 
 export interface WorkspaceDashboard {
@@ -111,7 +132,7 @@ export interface WorkspaceSearchResults {
     conversation_title: string;
     answer_snippet: string;
   }[];
-  artifacts: { id: string; title: string; filename: string; format: string; status: string }[];
+  artifacts: { id: string; title: string; filename: string; format: string; status: string; conversation_id: string | null }[];
   timeline: { event_type: string; title: string; created_at: string }[];
   chunks: { document_id: string; section: string; snippet: string; score: number }[];
 }

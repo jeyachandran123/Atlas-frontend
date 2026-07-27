@@ -129,6 +129,11 @@ export const workspaceApi = {
     api.get<ConversationRestore>(`/workspaces/${id}/conversations/${conversationId}`),
   renameConversation: (id: string, conversationId: string, title: string) =>
     api.patch<{ title: string }>(`/workspaces/${id}/conversations/${conversationId}`, { title }),
+  setConversationMode: (id: string, conversationId: string, mode: "all" | "selected") =>
+    api.patch<{ retrieval_mode: string; selected_document_ids: string[] }>(
+      `/workspaces/${id}/conversations/${conversationId}/mode`, { mode }),
+  attachDocument: (id: string, conversationId: string, documentId: string) =>
+    api.post(`/workspaces/${id}/conversations/${conversationId}/documents`, { document_id: documentId }),
   deleteConversation: (id: string, conversationId: string) =>
     api.delete<{ deleted: boolean }>(`/workspaces/${id}/conversations/${conversationId}`),
   detachDocument: (id: string, conversationId: string, documentId: string) =>
@@ -185,6 +190,19 @@ export const workspaceApi = {
 
   /** Download an artifact via the frozen generation download endpoint. */
   downloadArtifact: (artifactId: string) => knowledgeApi.downloadUrl(artifactId),
+
+  /** Full lifecycle deletion of a generated document (no orphans). */
+  deleteArtifact: (workspaceId: string, artifactId: string) =>
+    api.delete<{ artifact_id: string; bookmarks_removed: number }>(
+      `/workspaces/${workspaceId}/artifacts/${artifactId}`),
+
+  /** Record a View / Download of a generated document on the timeline.
+   *  Fire-and-forget — never block the user action on the audit write. */
+  recordArtifactEvent: (
+    workspaceId: string, artifactId: string, action: "viewed" | "downloaded",
+  ) =>
+    api.post(`/workspaces/${workspaceId}/artifacts/${artifactId}/event`, { action })
+      .catch(() => undefined),
 };
 
 // ── Named-event SSE (shared parser, same as knowledge.ts) ──────────────────────

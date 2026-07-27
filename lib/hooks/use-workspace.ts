@@ -29,6 +29,43 @@ export function useWorkspaceDocuments(workspaceId: string | null) {
   });
 }
 
+export function useConversationRestore(workspaceId: string, conversationId: string | null) {
+  return useQuery({
+    queryKey: ["workspace-restore", workspaceId, conversationId],
+    enabled: !!conversationId,
+    queryFn: () => workspaceApi.restore(workspaceId, conversationId!),
+  });
+}
+
+export function useSetConversationMode(workspaceId: string, conversationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (mode: "all" | "selected") =>
+      workspaceApi.setConversationMode(workspaceId, conversationId, mode),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["workspace-restore", workspaceId, conversationId] });
+      qc.invalidateQueries({ queryKey: ["workspace-conversations", workspaceId] });
+    },
+  });
+}
+
+export function useConversationDocuments(workspaceId: string, conversationId: string) {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["workspace-restore", workspaceId, conversationId] });
+    qc.invalidateQueries({ queryKey: ["workspace-timeline", workspaceId] });
+  };
+  const attach = useMutation({
+    mutationFn: (documentId: string) => workspaceApi.attachDocument(workspaceId, conversationId, documentId),
+    onSuccess: invalidate,
+  });
+  const detach = useMutation({
+    mutationFn: (documentId: string) => workspaceApi.detachDocument(workspaceId, conversationId, documentId),
+    onSuccess: invalidate,
+  });
+  return { attach, detach };
+}
+
 export function useWorkspaceConversations(workspaceId: string | null) {
   return useQuery({
     queryKey: ["workspace-conversations", workspaceId],

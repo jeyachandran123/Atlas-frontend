@@ -6,6 +6,7 @@ import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
 import { WorkspaceContextPanel } from "@/components/workspace/workspace-context-panel";
 import { DocumentViewer } from "@/components/workspace/document-viewer";
 import { OperationsTray } from "@/components/workspace/operations-tray";
+import { UploadConfirmDialog } from "@/components/workspace/upload-confirm-dialog";
 import { useWorkspaces } from "@/lib/hooks/use-workspace";
 import { useWorkspaceStore } from "@/lib/stores/workspace-store";
 
@@ -51,6 +52,7 @@ export function WorkspaceShell({
           at the shell so they survive page navigation within the workspace. */}
       <DocumentViewer />
       <OperationsTray />
+      <UploadConfirmDialog />
     </div>
   );
 }
