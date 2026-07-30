@@ -208,7 +208,20 @@ export interface ChatResponse {
 export type ChatStreamEvent =
   | { type: "token"; content: string }
   | { type: "tool_call"; tool_name: string; rationale?: string }
-  | { type: "done"; conversation_id: string; tokens_used: number }
+  | {
+      type: "done";
+      conversation_id: string;
+      tokens_used: number;
+      message_id?: string;
+      latency_ms?: number;
+      // ── Cognitive OS metadata (present only when the brain handled the turn) ──
+      brain?: boolean;
+      decision?: string;        // executive decision, e.g. "approve" | "escalate" | "ask_user"
+      authorized?: boolean;
+      escalated?: boolean;      // true => held for human review, not auto-answered
+      confidence?: number;      // 0..1 calibrated confidence
+      intent?: string;
+    }
   // conversation_id lets the client adopt the conversation even when the
   // stream fails — otherwise every retry would spawn a new conversation
   | { type: "error"; message: string; conversation_id?: string };
