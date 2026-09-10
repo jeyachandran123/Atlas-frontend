@@ -20,7 +20,7 @@ import {
 import { BookmarkButton } from "@/components/workspace/bookmark-button";
 import { GeneratedDocumentCard } from "@/components/workspace/generated-document-card";
 import {
-  streamWorkspaceAsk, streamWorkspaceGenerate, workspaceApi,
+  streamWorkspaceAsk, streamWorkspaceDocumentTask, streamWorkspaceGenerate, workspaceApi,
 } from "@/lib/api/workspace";
 import { useDeleteConversation, useWorkspaces } from "@/lib/hooks/use-workspace";
 import { useOperationsStore } from "@/lib/stores/operations-store";
@@ -56,6 +56,8 @@ interface GenItem {
   current: string | null;
   artifact: ConversationArtifact | null;
   error: string | null;
+  /** Set when the instruction was a question rather than a request for a file. */
+  answer?: string;
 }
 
 type Item = AskItem | GenItem;
@@ -241,6 +243,77 @@ export function ConversationView({
   }, [workspaceId, conversationId, qc, patchAsk, syncWorkspace]);
 
   // ── Generate a document (native conversation capability) ──────────────────
+  /**
+   * Transform the document that is in scope, rather than authoring a new one.
+   *
+   * Generate builds a document from a prompt through a content model capped at
+   * 2000 rows and 50 columns - it cannot express "expand this 1251-row,
+   * 77-column sheet". When a single document is selected the request is almost
+   * always about that document, so it goes to the task engine instead: the
+   * real file, real column names, code run over every row.
+   */
+  const runDocumentTask = useCallback(
+    async (instruction: string, fmt: string, documentId: string) => {
+      const key = `gen-live-${Date.now()}`;
+      setBusy(true);
+      setItems((prev) => [...prev, {
+        kind: "gen", key, createdAt: Date.now(), prompt: instruction, format: fmt,
+        status: "running", stages: [], current: null, artifact: null, error: null,
+      }]);
+      let settled = false;
+
+      abortRef.current = streamWorkspaceDocumentTask(
+        workspaceId, documentId, instruction, fmt || null,
+        (e) => {
+          if (e.event === "stage") {
+            patchGen(key, (g) => ({
+              stages: g.stages.includes(e.data.stage) ? g.stages : [...g.stages, e.data.stage],
+              current: e.data.stage,
+            }));
+          } else if (e.event === "done") {
+            settled = true;
+            if (e.data.kind === "answer") {
+              // The instruction was a question; the answer is the deliverable.
+              patchGen(key, {
+                status: "ready", current: null, error: null,
+                artifact: null, answer: e.data.answer ?? "",
+              });
+            } else {
+              patchGen(key, {
+                status: "ready",
+                current: null,
+                error: null,
+                artifact: {
+                  id: e.data.artifact_id!, title: e.data.filename ?? "Result",
+                  filename: e.data.filename ?? "result",
+                  format: (e.data.filename ?? "").split(".").pop() ?? fmt,
+                  status: "ready", prompt: instruction,
+                  size_bytes: e.data.size_bytes ?? 0, grounded: true, error: null,
+                  conversation_id: conversationId, created_at: new Date().toISOString(),
+                },
+              });
+            }
+            syncWorkspace();
+            qc.invalidateQueries({ queryKey: ["workspace-restore", workspaceId, conversationId] });
+          } else if (e.event === "error") {
+            settled = true;
+            patchGen(key, { status: "failed", current: null, error: e.data.message });
+          }
+        },
+        () => {
+          setBusy(false);
+          if (!settled) patchGen(key, { status: "failed", current: null, error: "The task failed" });
+        },
+        () => {
+          setBusy(false);
+          if (!settled) patchGen(key, { status: "cancelled", current: null });
+          syncWorkspace();
+        },
+      );
+    },
+    [workspaceId, conversationId, qc, patchGen, syncWorkspace],
+  );
+
   const generate = useCallback(async (prompt: string, fmt: string) => {
     const key = `gen-live-${Date.now()}`;
     setBusy(true);
@@ -297,9 +370,12 @@ export function ConversationView({
     const text = input.trim();
     if (!text || busy) return;
     setInput("");
-    if (genMode) void generate(text, format);
-    else void ask(text);
-  }, [input, busy, genMode, format, generate, ask]);
+    if (genMode) {
+      const scoped = restore?.documents ?? [];
+      if (scoped.length === 1) void runDocumentTask(text, format, scoped[0]!.id);
+      else void generate(text, format);
+    } else void ask(text);
+  }, [input, busy, genMode, format, generate, runDocumentTask, ask, restore]);
 
   const stop = useCallback(() => { abortRef.current?.abort(); }, []);
 
@@ -521,6 +597,13 @@ export function ConversationView({
                 )}
                 {(item.status === "ready" || item.status === "failed") && item.artifact && (
                   <GeneratedDocumentCard workspaceId={workspaceId} artifact={item.artifact} onDeleted={removeItem} />
+                )}
+                {item.status === "ready" && !item.artifact && item.answer && (
+                  // The instruction turned out to be a question - the number
+                  // computed over every row is the result, and there is no file.
+                  <div className="rounded-2xl rounded-bl-md px-4 py-3 text-[13px] whitespace-pre-wrap" style={{ background: "var(--surface-1)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", maxWidth: "95%" }}>
+                    {item.answer}
+                  </div>
                 )}
                 {item.status === "failed" && !item.artifact && (
                   <div className="rounded-2xl rounded-bl-md px-4 py-3 text-[13px]" style={{ background: "var(--surface-1)", border: "1px solid var(--border-subtle)", color: "var(--status-error)", maxWidth: "95%" }}>
