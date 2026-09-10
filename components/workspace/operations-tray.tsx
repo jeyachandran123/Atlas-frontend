@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, FileText, Loader2, Sparkles, X, XCircle } from "lucide-react";
 import { knowledgeApi } from "@/lib/api/knowledge";
+import { isFailed, isProcessing, isReady } from "@/lib/documents/processing-status";
 import {
   STATUS_LABEL, useOperationsStore, type Operation,
 } from "@/lib/stores/operations-store";
@@ -25,25 +26,36 @@ export function OperationsTray() {
   const qc = useQueryClient();
   const tick = useRef(0);
 
-  // Poll processing status for upload operations still in flight.
+  // Which uploads still need watching. Keyed by id rather than by the
+  // operations array itself: the array gets a new identity on every status
+  // tweak, and depending on it tore down and rebuilt the interval mid-flight,
+  // so a tick could be lost each time an operation advanced.
+  const pendingKey = operations
+    .filter((o) => o.kind === "upload" && o.documentId && !DONE.has(o.status))
+    .map((o) => o.id)
+    .sort()
+    .join(",");
+
   useEffect(() => {
-    const pending = operations.filter(
-      (o) => o.kind === "upload" && o.documentId && !DONE.has(o.status),
-    );
-    if (pending.length === 0) return;
+    if (!pendingKey) return;
     const timer = setInterval(async () => {
       tick.current += 1;
+      // Read through the store rather than a captured array, so each tick sees
+      // the current status instead of the one from when the effect last ran.
+      const pending = useOperationsStore
+        .getState()
+        .operations.filter((o) => o.kind === "upload" && o.documentId && !DONE.has(o.status));
       for (const op of pending) {
         try {
           const state = await knowledgeApi.processingState(op.documentId!);
           const ps = state.processing_status;
-          if (ps === "knowledge_ready") {
+          if (isReady(ps)) {
             finish(op.id, "completed");
             qc.invalidateQueries({ queryKey: ["workspace-documents", op.workspaceId] });
             qc.invalidateQueries({ queryKey: ["workspace-restore"] });
-          } else if (ps === "failed") {
+          } else if (isFailed(ps)) {
             finish(op.id, "failed", state.error ?? undefined);
-          } else if (["queued", "processing", "retrying"].includes(ps) && op.status !== "processing") {
+          } else if (isProcessing(ps) && op.status !== "processing") {
             update(op.id, { status: "processing" });
           }
         } catch {
@@ -52,7 +64,7 @@ export function OperationsTray() {
       }
     }, 2500);
     return () => clearInterval(timer);
-  }, [operations, update, finish, qc]);
+  }, [pendingKey, update, finish, qc]);
 
   if (operations.length === 0) return null;
 

@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { BookmarkButton } from "@/components/workspace/bookmark-button";
 import { workspaceApi } from "@/lib/api/workspace";
+import { isFailed, isProcessing, isReady } from "@/lib/documents/processing-status";
 import {
   useAddBookmark, useDeleteBookmark, useWorkspaceArtifacts, useWorkspaceBookmarks,
   useWorkspaceDashboard, useWorkspaceDocuments, useWorkspaceTimeline,
@@ -524,9 +525,9 @@ function DocumentActions({
 }
 
 function DocStatus({ status }: { status: string }) {
-  if (status === "knowledge_ready") return <Badge variant="ready" dot>Ready</Badge>;
-  if (status === "failed") return <Badge variant="error" dot>Failed</Badge>;
-  if (["queued", "processing", "retrying"].includes(status)) return <Badge variant="indexing" dot>Processing…</Badge>;
+  if (isReady(status)) return <Badge variant="ready" dot>Ready</Badge>;
+  if (isFailed(status)) return <Badge variant="error" dot>Failed</Badge>;
+  if (isProcessing(status)) return <Badge variant="indexing" dot>Processing…</Badge>;
   return <Badge variant="pending">{status}</Badge>;
 }
 
