@@ -263,7 +263,7 @@ export function ConversationView({
       let settled = false;
 
       abortRef.current = streamWorkspaceDocumentTask(
-        workspaceId, documentId, instruction, fmt || null,
+        workspaceId, documentId, instruction, fmt || null, conversationId,
         (e) => {
           if (e.event === "stage") {
             patchGen(key, (g) => ({

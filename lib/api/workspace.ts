@@ -298,6 +298,7 @@ export function streamWorkspaceDocumentTask(
   documentId: string,
   instruction: string,
   format: string | null,
+  conversationId: string | null,
   onEvent: (e: WorkspaceDocumentTaskEvent) => void,
   onError: (err: Error) => void,
   onComplete: () => void,
@@ -305,7 +306,7 @@ export function streamWorkspaceDocumentTask(
   const controller = new AbortController();
   void streamNamedSSE<WorkspaceDocumentTaskEvent>(
     `/workspaces/${workspaceId}/documents/${documentId}/task/stream`,
-    { instruction, format },
+    { instruction, format, conversation_id: conversationId },
     onEvent, onError, onComplete, controller.signal,
   );
   return controller;
