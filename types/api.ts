@@ -34,6 +34,10 @@ export interface UserOut {
   full_name: string | null;
   role: UserRole;
   created_at: string;
+  /** Whether email + password sign-in works for this account. */
+  has_password?: boolean;
+  /** How the account was first created: "email", "google", … */
+  auth_provider?: string | null;
 }
 
 export interface LoginRequest {
@@ -60,12 +64,32 @@ export interface FirebaseLoginResponse {
   is_new_user: boolean;
 }
 
+/** Sign-up. The server decides role and organisation. */
 export interface RegisterRequest {
   email: string;
   password: string;
-  full_name?: string;
-  role?: UserRole;
-  org_id: string;
+  full_name: string;
+}
+
+/** Sign-up accepted, but the address must be confirmed with an emailed code first. */
+export interface SignupVerificationPending {
+  verification: "email_otp";
+  email: string;
+  /** Seconds until the code expires. */
+  expires_in: number;
+  /** Seconds before another code can be requested. */
+  resend_after: number;
+}
+
+export interface VerifySignupRequest {
+  email: string;
+  code: string;
+}
+
+export interface SetPasswordRequest {
+  /** Required when the account already has a password. */
+  current_password?: string;
+  new_password: string;
 }
 
 export interface APIKeyOut {

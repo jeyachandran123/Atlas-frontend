@@ -5,6 +5,7 @@ import { Key, Plus, Trash2, Copy, Check, User, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/lib/hooks/use-auth";
 import { LogoutDialog } from "@/components/auth/logout-dialog";
+import { SignInMethods } from "@/components/auth/sign-in-methods";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { formatRelativeTime } from "@/lib/utils/format";
 
@@ -98,6 +99,8 @@ export default function ApiKeysPage() {
               <LogoutDialog open={confirmLogout} onOpenChange={setConfirmLogout} />
             </div>
           )}
+
+          <SignInMethods />
 
           {/* Revealed key */}
           {revealedKey && (
