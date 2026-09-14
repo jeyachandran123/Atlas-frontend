@@ -95,6 +95,27 @@ export function ChatPageSkeleton() {
   );
 }
 
+/** The new-chat greeting and prompt box. */
+function NewChatBlocks() {
+  return (
+    <>
+      <Skeleton className="size-16 rounded-[20px]" />
+      <Skeleton className="h-7 w-72 max-w-full" />
+      <Skeleton className="h-4 w-96 max-w-full" />
+      <Skeleton className="mt-6 h-[104px] w-full max-w-[640px] rounded-2xl" />
+    </>
+  );
+}
+
+/** The new-chat page: greeting, then the prompt box. */
+export function NewChatSkeleton() {
+  return (
+    <Loading label="Loading chat" className="flex h-full min-w-0 flex-col items-center justify-center gap-4 px-6">
+      <NewChatBlocks />
+    </Loading>
+  );
+}
+
 // ── Pages ─────────────────────────────────────────────────────────────────
 
 /** A standard page: title, subtitle, a few content cards. */
@@ -181,6 +202,59 @@ export function ListRowsSkeleton({ rows = 4 }: { rows?: number }) {
           <Skeleton className="h-3" style={{ width: `${78 - (i % 3) * 14}%` }} />
         </div>
       ))}
+    </Loading>
+  );
+}
+
+// ── Library ───────────────────────────────────────────────────────────────
+
+function LibraryTiles() {
+  return (
+    <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+      {Array.from({ length: 10 }, (_, i) => (
+        <div key={i} className="overflow-hidden rounded-2xl" style={CARD}>
+          <Skeleton className="aspect-[4/3] w-full rounded-none" />
+          <div className="flex flex-col gap-1.5 px-3 py-3">
+            <Skeleton className="h-3 w-3/4" />
+            <Skeleton className="h-2.5 w-1/2" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The Library's grid of tiles: a preview and two lines each. */
+export function LibraryGridSkeleton() {
+  return (
+    <Loading label="Loading library">
+      <LibraryTiles />
+    </Loading>
+  );
+}
+
+/** The whole Library page: title, filters and search, then the tiles. */
+export function LibrarySkeleton() {
+  return (
+    <Loading label="Loading library" className="flex h-full flex-col">
+      <div className="page-header">
+        <div className="mx-auto w-full max-w-6xl">
+          <div className="flex items-center gap-3">
+            <Skeleton className="size-10 shrink-0 rounded-xl" />
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <Skeleton className="h-5 w-28" />
+              <Skeleton className="h-3.5 w-[420px] max-w-full" />
+            </div>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Skeleton className="h-10 w-80 max-w-full rounded-xl" />
+            <Skeleton className="h-10 min-w-[200px] flex-1 rounded-xl" />
+          </div>
+        </div>
+      </div>
+      <div className="mx-auto w-full max-w-6xl px-6 pt-2">
+        <LibraryTiles />
+      </div>
     </Loading>
   );
 }
@@ -289,10 +363,7 @@ export function AppShellSkeleton() {
         </div>
       </div>
       <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-4 px-6">
-        <Skeleton className="size-16 rounded-[20px]" />
-        <Skeleton className="h-7 w-72" />
-        <Skeleton className="h-4 w-96 max-w-full" />
-        <Skeleton className="mt-6 h-[104px] w-full max-w-[640px] rounded-2xl" />
+        <NewChatBlocks />
       </div>
     </Loading>
   );

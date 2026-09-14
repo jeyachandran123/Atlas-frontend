@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   BookOpenText, Check, ChevronsUpDown, FolderGit2, KeyRound, Library, LogOut, Monitor, Moon,
@@ -17,6 +17,7 @@ import { useUIStore } from "@/lib/stores/ui-store";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useRepos } from "@/lib/hooks/use-repos";
+import { useInstantNavigate } from "@/lib/hooks/use-instant-navigate";
 import { useTheme } from "@/app/providers";
 
 const SPACES: Array<{ href: string; label: string; Icon: React.ElementType; match: string[] }> = [
@@ -47,7 +48,8 @@ export function AppSidebar() {
   const setPaletteOpen = useUIStore((s) => s.setPaletteOpen);
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const pathname = usePathname();
-  const router = useRouter();
+  const pendingHref = useUIStore((s) => s.pendingHref);
+  const { navigate, onLinkClick } = useInstantNavigate();
   const [confirmLogout, setConfirmLogout] = useState(false);
 
   // Pulse the Knowledge space while any repository is indexing.
@@ -57,10 +59,12 @@ export function AppSidebar() {
   function newChat() {
     // No API call — the backend creates the conversation on the first message.
     setActiveConversation(null);
-    router.push("/chat");
+    navigate("/chat");
   }
 
-  const isActive = (match: string[]) => match.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  // The highlight follows the click, not the page load.
+  const here = pendingHref ?? pathname;
+  const isActive = (match: string[]) => match.some((p) => here === p || here.startsWith(`${p}/`));
 
   return (
     <TooltipProvider>
@@ -129,6 +133,7 @@ export function AppSidebar() {
               label={label}
               Icon={Icon}
               href={href}
+              onNavigate={(e) => onLinkClick(e, href)}
               active={isActive(match)}
               busy={href === "/repos" && indexing}
             />
@@ -172,13 +177,15 @@ function BrandMark() {
 }
 
 function NavRow({
-  collapsed, label, Icon, href, onClick, active = false, hint, busy = false,
+  collapsed, label, Icon, href, onClick, onNavigate, active = false, hint, busy = false,
 }: {
   collapsed: boolean;
   label: string;
   Icon: React.ElementType;
   href?: string;
   onClick?: () => void;
+  /** Runs as the link is clicked, before the page arrives. */
+  onNavigate?: (e: React.MouseEvent<HTMLAnchorElement>) => void;
   active?: boolean;
   hint?: string;
   busy?: boolean;
@@ -215,7 +222,7 @@ function NavRow({
   );
 
   const element = href ? (
-    <Link href={href} aria-label={label} aria-current={active ? "page" : undefined} className={className}>
+    <Link href={href} onClick={onNavigate} aria-label={label} aria-current={active ? "page" : undefined} className={className}>
       {content}
     </Link>
   ) : (
@@ -236,7 +243,7 @@ function NavRow({
 function AccountMenu({ collapsed, onLogout }: { collapsed: boolean; onLogout: () => void }) {
   const user = useAuthStore((s) => s.user);
   const { theme, setTheme } = useTheme();
-  const router = useRouter();
+  const { navigate } = useInstantNavigate();
 
   const name = user?.full_name?.trim() || user?.email?.split("@")[0] || "Account";
   const avatar = <UserAvatar name={name} src={user?.avatar_url} className="size-8 text-[12px]" />;
@@ -291,7 +298,7 @@ function AccountMenu({ collapsed, onLogout }: { collapsed: boolean; onLogout: ()
             </div>
           </div>
           <MenuSeparator />
-          <MenuItem Icon={Settings} label="Settings" onSelect={() => router.push("/settings")} />
+          <MenuItem Icon={Settings} label="Settings" onSelect={() => navigate("/settings")} />
           <DropdownMenu.Label
             className="px-2.5 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-wider"
             style={{ color: "var(--text-muted)" }}

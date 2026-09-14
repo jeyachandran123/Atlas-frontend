@@ -11,6 +11,7 @@ import {
   useDeleteConversation, usePinConversation, useUnpinConversation,
 } from "@/lib/hooks/use-chat";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useInstantNavigate } from "@/lib/hooks/use-instant-navigate";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ConversationListSkeleton } from "@/components/ui/skeleton";
@@ -86,6 +87,7 @@ export function ConversationList() {
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const activeId = useChatStore((s) => s.activeConversationId);
   const router = useRouter();
+  const { navigate } = useInstantNavigate();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<ConversationOut | null>(null);
@@ -95,7 +97,7 @@ export function ConversationList() {
   function newChat() {
     // ChatGPT-style: no conversation is created until the first message.
     setActiveConversation(null);
-    router.push("/chat");
+    navigate("/chat");
   }
 
   useEffect(() => {
@@ -176,7 +178,7 @@ export function ConversationList() {
                       active={c.id === activeId}
                       editing={editingId === c.id}
                       editTitle={editTitle}
-                      onSelect={() => { setActiveConversation(c.id); router.push(`/chat/${c.id}`); }}
+                      onSelect={() => { setActiveConversation(c.id); navigate(`/chat/${c.id}`); }}
                       onStartEdit={() => { setEditingId(c.id); setEditTitle(c.title); }}
                       onSaveEdit={saveEdit}
                       onCancelEdit={() => { setEditingId(null); setEditTitle(""); }}

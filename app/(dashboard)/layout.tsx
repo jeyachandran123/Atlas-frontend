@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import { RouteTransition } from "@/components/layout/route-transition";
 import { AppShellSkeleton } from "@/components/ui/skeleton";
 import { CommandPalette } from "@/components/command/command-palette";
 import { DocumentViewer } from "@/components/workspace/document-viewer";
@@ -62,7 +63,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <div className="relative flex h-screen bg-canvas">
         <CommandPalette />
         <AppSidebar />
-        <main className="flex-1 overflow-hidden">{children}</main>
+        <main className="flex-1 overflow-hidden">
+          <RouteTransition>{children}</RouteTransition>
+        </main>
         {/* One file viewer for the whole app: chat, Library, workspaces. */}
         <DocumentViewer />
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Command } from "cmdk";
 import {
   MessageSquare, FolderGit2, Search as SearchIcon, Settings,
@@ -12,6 +12,7 @@ import { useRepos } from "@/lib/hooks/use-repos";
 import { useSearch } from "@/lib/hooks/use-search";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useUIStore } from "@/lib/stores/ui-store";
+import { useInstantNavigate } from "@/lib/hooks/use-instant-navigate";
 import { useTheme } from "@/app/providers";
 import { truncatePath } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -32,7 +33,7 @@ export function CommandPalette() {
   const setOpen = useUIStore((s) => s.setPaletteOpen);
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
-  const router = useRouter();
+  const { navigate } = useInstantNavigate();
   const pathname = usePathname();
 
   const { data: convData } = useConversations();
@@ -97,7 +98,7 @@ export function CommandPalette() {
     // No API call — the backend creates the conversation on first message
     // and the URL adopts it (/chat → /chat/{id}) mid-stream.
     setActiveConversation(null);
-    router.push("/chat");
+    navigate("/chat");
   }
 
   const q = query.trim().toLowerCase();
@@ -105,17 +106,17 @@ export function CommandPalette() {
 
   const actions = useMemo(() => ([
     { label: "New chat", icon: Plus, kbd: "Ctrl ⇧ O", fn: newChat },
-    { label: "Go to Chat", icon: MessageSquare, fn: () => router.push("/chat") },
-    { label: "Go to Knowledge", icon: FolderGit2, fn: () => router.push("/repos") },
-    { label: "Go to Code Search", icon: SearchIcon, fn: () => router.push("/search") },
-    { label: "Go to Settings", icon: Settings, fn: () => router.push("/settings") },
-    { label: "Go to API keys", icon: KeyRound, fn: () => router.push("/settings/keys") },
-    { label: "Open Library", icon: Library, fn: () => router.push("/library") },
+    { label: "Go to Chat", icon: MessageSquare, fn: () => navigate("/chat") },
+    { label: "Go to Knowledge", icon: FolderGit2, fn: () => navigate("/repos") },
+    { label: "Go to Code Search", icon: SearchIcon, fn: () => navigate("/search") },
+    { label: "Go to Settings", icon: Settings, fn: () => navigate("/settings") },
+    { label: "Go to API keys", icon: KeyRound, fn: () => navigate("/settings/keys") },
+    { label: "Open Library", icon: Library, fn: () => navigate("/library") },
     { label: "Theme: Dark", icon: Moon, fn: () => setTheme("dark") },
     { label: "Theme: Light", icon: Sun, fn: () => setTheme("light") },
     { label: "Theme: System", icon: Monitor, fn: () => setTheme("system") },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ]), [router, setTheme]);
+  ]), [navigate, setTheme]);
 
   const visibleActions = actions.filter((a) => matches(a.label));
   const visibleConvs = conversations
@@ -183,7 +184,7 @@ export function CommandPalette() {
               <Command.Item
                 key={c.id}
                 value={`conv-${c.id}`}
-                onSelect={() => run(() => { setActiveConversation(c.id); router.push(`/chat/${c.id}`); })}
+                onSelect={() => run(() => { setActiveConversation(c.id); navigate(`/chat/${c.id}`); })}
                 className="cmdk-item"
               >
                 <MessageSquare className="size-4 shrink-0" style={{ color: "var(--text-tertiary)" }} />
@@ -203,7 +204,7 @@ export function CommandPalette() {
                   value={`code-${i}`}
                   onSelect={() =>
                     run(() =>
-                      router.push(
+                      navigate(
                         `/search?q=${encodeURIComponent(debounced.trim())}&repo=${effectiveScope.id}`,
                       ),
                     )

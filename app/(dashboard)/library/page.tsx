@@ -9,6 +9,7 @@ import {
 import { useLibrary } from "@/lib/hooks/use-library";
 import { libraryApi } from "@/lib/api/library";
 import { useViewerStore } from "@/lib/stores/viewer-store";
+import { LibraryGridSkeleton } from "@/components/ui/skeleton";
 import type { LibraryItem, LibraryKind } from "@/types/api";
 
 type Tab = "all" | LibraryKind;
@@ -219,7 +220,7 @@ export default function LibraryPage() {
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-2">
           {isLoading ? (
-            <SkeletonGrid />
+            <LibraryGridSkeleton />
           ) : isError ? (
             <Notice
               title="Couldn't load your library"
@@ -537,22 +538,6 @@ function Stat({ label, value }: { label: string; value: number }) {
     <div className="min-w-[72px] rounded-xl px-3 py-1.5 text-center" style={{ background: "var(--surface-1)", border: "1px solid var(--border-default)" }}>
       <p className="text-[15px] font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{value}</p>
       <p className="text-[10px] font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>{label}</p>
-    </div>
-  );
-}
-
-function SkeletonGrid() {
-  return (
-    <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
-      {Array.from({ length: 10 }).map((_, i) => (
-        <div key={i} className="overflow-hidden rounded-2xl" style={TILE_STYLE}>
-          <div className="aspect-[4/3] animate-pulse" style={{ background: "var(--surface-2)" }} />
-          <div className="flex flex-col gap-1.5 px-3 py-3">
-            <div className="h-3 w-3/4 animate-pulse rounded" style={{ background: "var(--surface-2)" }} />
-            <div className="h-2.5 w-1/2 animate-pulse rounded" style={{ background: "var(--surface-2)" }} />
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
