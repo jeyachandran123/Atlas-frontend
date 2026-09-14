@@ -8,6 +8,7 @@ import { ChatFileCard, type ChatFilePayload } from "@/components/chat/chat-file-
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatTokenCount } from "@/lib/utils/format";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useViewerStore } from "@/lib/stores/viewer-store";
 import { getAccessToken } from "@/lib/api/token-store";
 import type { MessageOut } from "@/types/api";
 
@@ -71,6 +72,7 @@ export function MessageBubble({
   // before it. The API returns each message's own attachments now, so there is
   // nothing to guess.
   const zustandImages = useChatStore((s) => s.messageImages[message.id]);
+  const openViewer = useViewerStore((s) => s.open);
 
   // For API images, we need authenticated fetch since <img> can't send Bearer tokens
   const [resolvedApiImages, setResolvedApiImages] = useState<Array<{ id: string; url: string; name: string }>>([]);
@@ -121,20 +123,11 @@ export function MessageBubble({
       .map((d) => ({ id: d.id, name: d.name }));
   })();
 
-  async function downloadDocument(doc: { name: string; url?: string }) {
+  // Opens in the in-app viewer (with a Download button there). A document
+  // that is still uploading has no saved copy yet, so there is nothing to open.
+  function openDocument(doc: { id: string; name: string; url?: string }) {
     if (!doc.url) return;
-    const token = getAccessToken();
-    const res = await fetch(`${API_BASE}${doc.url}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const objUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = objUrl;
-    a.download = doc.name;
-    a.click();
-    URL.revokeObjectURL(objUrl);
+    openViewer({ kind: "chat_document", id: doc.id, title: doc.name, filename: doc.name });
   }
 
   // Auto-resize textarea as content grows
@@ -224,8 +217,8 @@ export function MessageBubble({
                     {displayDocs.map((doc) => (
                       <button
                         key={doc.id}
-                        onClick={() => downloadDocument(doc)}
-                        title={doc.url ? `Download ${doc.name}` : doc.name}
+                        onClick={() => openDocument(doc)}
+                        title={doc.url ? `Open ${doc.name}` : doc.name}
                         className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] transition-opacity hover:opacity-80"
                         style={{
                           background: "var(--surface-3)",

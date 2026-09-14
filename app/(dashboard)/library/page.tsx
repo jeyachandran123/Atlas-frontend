@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useLibrary } from "@/lib/hooks/use-library";
 import { libraryApi } from "@/lib/api/library";
+import { useViewerStore } from "@/lib/stores/viewer-store";
 import type { LibraryItem, LibraryKind } from "@/types/api";
 
 type Tab = "all" | LibraryKind;
@@ -89,6 +90,7 @@ export default function LibraryPage() {
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [viewer, setViewer] = useState<number | null>(null);
+  const openFile = useViewerStore((s) => s.open);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query.trim()), 250);
@@ -242,7 +244,17 @@ export default function LibraryPage() {
                           onOpen={() => setViewer(images.findIndex((x) => x.id === item.id))}
                         />
                       ) : (
-                        <FileTile key={`${item.kind}-${item.id}`} item={item} />
+                        <FileTile
+                          key={`${item.kind}-${item.id}`}
+                          item={item}
+                          onOpen={() => openFile({
+                            kind: item.kind === "created" ? "artifact" : "chat_document",
+                            id: item.id,
+                            title: item.name,
+                            filename: item.filename,
+                            extension: item.format,
+                          })}
+                        />
                       ),
                     )}
                   </div>
@@ -322,12 +334,14 @@ function ImageTile({ item, onOpen }: { item: LibraryItem; onOpen: () => void }) 
   );
 }
 
-function FileTile({ item }: { item: LibraryItem }) {
+function FileTile({ item, onOpen }: { item: LibraryItem; onOpen: () => void }) {
   const s = formatStyle(item.format);
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg" style={TILE_STYLE}>
-      <div
-        className="relative flex aspect-[4/3] items-center justify-center"
+      <button
+        onClick={onOpen}
+        aria-label={`Open ${item.name}`}
+        className="relative flex aspect-[4/3] w-full cursor-pointer items-center justify-center"
         style={{ background: `linear-gradient(145deg, ${s.color}24, ${s.color}08)` }}
       >
         <div
@@ -350,7 +364,7 @@ function FileTile({ item }: { item: LibraryItem }) {
             <Sparkles className="size-2.5" /> Created
           </span>
         )}
-      </div>
+      </button>
       <TileFooter item={item} />
       <TileActions item={item} />
     </div>

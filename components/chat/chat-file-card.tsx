@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Check, Download, FileSpreadsheet, FileText, FileType2, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, Download, Eye, FileSpreadsheet, FileText, FileType2, Loader2 } from "lucide-react";
 import { knowledgeApi } from "@/lib/api/knowledge";
+import { useViewerStore } from "@/lib/stores/viewer-store";
 import type { ChatFilePayload } from "@/types/api";
 
 export type { ChatFilePayload };
@@ -31,7 +32,19 @@ function formatBytes(n?: number | null): string {
 /** A file the assistant made, as a message: what it is, where it came from, and a download. */
 export function ChatFileCard({ data }: { data: ChatFilePayload }) {
   const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const openViewer = useViewerStore((s) => s.open);
   const fmt = FORMATS[(data.format ?? "").toLowerCase()] ?? FORMATS.pdf!;
+
+  function view() {
+    if (!data.artifact_id) return;
+    openViewer({
+      kind: "artifact",
+      id: data.artifact_id,
+      title: data.title || data.filename || "Your file",
+      filename: data.filename || "",
+      extension: data.format ?? undefined,
+    });
+  }
   const failed = data.status !== "ready";
 
   async function download() {
@@ -108,6 +121,13 @@ export function ChatFileCard({ data }: { data: ChatFilePayload }) {
         )}
       </div>
 
+      <button
+        onClick={view}
+        disabled={!data.artifact_id}
+        className="ghost-btn flex shrink-0 items-center gap-1.5 px-3 py-2 text-[12.5px] font-medium"
+      >
+        <Eye className="size-3.5" /> View
+      </button>
       <button
         onClick={() => void download()}
         disabled={!data.artifact_id || state === "busy"}

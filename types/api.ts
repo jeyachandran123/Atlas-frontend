@@ -312,6 +312,26 @@ export interface LibraryPage {
   offset: number;
 }
 
+/** One sheet (or Word table) as the viewer draws it — mirrors app/library/preview.py. */
+export interface PreviewSheet {
+  name: string;
+  rows: string[][];
+  total_rows: number;
+  total_cols: number;
+  truncated: boolean;
+}
+
+export type FilePreview =
+  | { type: "table"; sheets: PreviewSheet[]; sheet_count: number }
+  | {
+      type: "document";
+      blocks: Array<{ kind: "heading" | "paragraph"; text: string }>;
+      tables: PreviewSheet[];
+      truncated: boolean;
+    }
+  | { type: "too_large"; max_mb: number }
+  | { type: "unsupported" };
+
 // ── Search & Retrieval ───────────────────────────────────────────────────
 
 export interface CodeChunk {

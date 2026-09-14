@@ -12,13 +12,20 @@ import {
 } from "@/lib/hooks/use-auth";
 import { signInWithGoogle } from "@/lib/firebase";
 import { OtpInput } from "@/components/auth/otp-input";
+import { PasswordInput } from "@/components/auth/password-input";
 import { ApiError } from "@/types/api";
 
-const schema = z.object({
-  full_name: z.string().trim().min(1, "Name is required"),
-  email: z.string().email("Enter a valid email"),
-  password: z.string().min(8, "Use at least 8 characters").max(128, "Use at most 128 characters"),
-});
+const schema = z
+  .object({
+    full_name: z.string().trim().min(1, "Name is required"),
+    email: z.string().email("Enter a valid email"),
+    password: z.string().min(8, "Use at least 8 characters").max(128, "Use at most 128 characters"),
+    confirm_password: z.string().min(1, "Type your password again"),
+  })
+  .refine((v) => v.password === v.confirm_password, {
+    message: "The passwords don't match",
+    path: ["confirm_password"],
+  });
 type FormValues = z.infer<typeof schema>;
 
 type Step =
@@ -60,7 +67,9 @@ export default function RegisterPage() {
   }
 
   function onSubmit(values: FormValues) {
-    registerMutation.mutate(values, {
+    // The confirmation is checked here and never sent.
+    const payload = { full_name: values.full_name, email: values.email, password: values.password };
+    registerMutation.mutate(payload, {
       onSuccess: (res) => {
         if ("verification" in res) {
           setStep({
@@ -147,8 +156,11 @@ export default function RegisterPage() {
         <Field label="Email" error={errors.email?.message}>
           <input type="email" autoComplete="email" placeholder="you@company.com" {...register("email")} className="auth-input" />
         </Field>
-        <Field label="Password" error={errors.password?.message} hint="At least 8 characters">
-          <input type="password" autoComplete="new-password" placeholder="••••••••" {...register("password")} className="auth-input" />
+        <Field label="Create password" error={errors.password?.message} hint="At least 8 characters">
+          <PasswordInput autoComplete="new-password" placeholder="••••••••" {...register("password")} className="auth-input" />
+        </Field>
+        <Field label="Confirm password" error={errors.confirm_password?.message}>
+          <PasswordInput autoComplete="new-password" placeholder="••••••••" {...register("confirm_password")} className="auth-input" />
         </Field>
 
         {registerError && <ErrorMessage message={registerError} />}

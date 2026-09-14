@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { Loader2, PanelLeft } from "lucide-react";
-import { IconRail } from "@/components/layout/icon-rail";
-import { ContextPanel } from "@/components/layout/context-panel";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
+import { AppSidebar } from "@/components/layout/app-sidebar";
 import { CommandPalette } from "@/components/command/command-palette";
+import { DocumentViewer } from "@/components/workspace/document-viewer";
 import { useCurrentUser } from "@/lib/hooks/use-auth";
 import { setAccessToken } from "@/lib/api/token-store";
 import { scheduleProactiveRefresh } from "@/lib/api/client";
-import { useUIStore } from "@/lib/stores/ui-store";
 
 /**
  * Bootstraps the session on every hard navigation/refresh:
@@ -55,37 +54,17 @@ function useSessionBootstrap() {
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const status = useSessionBootstrap();
-  const panelCollapsed = useUIStore((s) => s.sidebarCollapsed);
-  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
-  const pathname = usePathname();
 
-  // The context panel belongs to the Chat space; other spaces get a full-width stage.
-  const onChat = pathname.startsWith("/chat");
-  const showPanel = onChat && !panelCollapsed;
-
+  // One sidebar on every page — brand, spaces, chats and account — and the
+  // page beside it. Folding the sidebar (Ctrl+\) leaves its icon strip.
   return (
     <SessionGate status={status}>
       <div className="relative flex h-screen bg-canvas">
         <CommandPalette />
-        <IconRail />
-        {showPanel && <ContextPanel />}
-        {/* Always-visible re-open affordance when the list is hidden */}
-        {onChat && panelCollapsed && (
-          <button
-            onClick={toggleSidebar}
-            aria-label="Show conversations"
-            title="Show conversations (Ctrl+\)"
-            className="icon-btn absolute left-[60px] top-3 z-20 size-8"
-            style={{
-              background: "var(--surface-2)",
-              border: "1px solid var(--border-default)",
-              boxShadow: "var(--shadow-sm)",
-            }}
-          >
-            <PanelLeft className="size-[15px]" />
-          </button>
-        )}
+        <AppSidebar />
         <main className="flex-1 overflow-hidden">{children}</main>
+        {/* One file viewer for the whole app: chat, Library, workspaces. */}
+        <DocumentViewer />
       </div>
     </SessionGate>
   );

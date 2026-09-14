@@ -546,7 +546,10 @@
   animation: fade-in 150ms ease both;
 }
 .cmdk-content {
-  position: fixed; left: 50%; top: 16%; transform: translateX(-50%);
+  /* Centred with margins, not transform: the scale-up animation below sets
+     transform too, and with fill-mode "both" its end state (scale(1)) replaced
+     translateX(-50%) — leaving the palette's left edge at the middle of the screen. */
+  position: fixed; left: 0; right: 0; margin-inline: auto; top: 16%;
   z-index: 61; width: min(560px, calc(100vw - 32px));
   background: var(--surface-1);
   border: 1px solid var(--border-strong);

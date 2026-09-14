@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { Command } from "cmdk";
 import {
   MessageSquare, FolderGit2, Search as SearchIcon, Settings,
-  Plus, FileCode2, Library, Moon, Sun, Monitor, Loader2, CornerDownLeft,
+  Plus, FileCode2, Library, KeyRound, Moon, Sun, Monitor, Loader2, CornerDownLeft,
 } from "lucide-react";
 import { useConversations } from "@/lib/hooks/use-chat";
 import { useRepos } from "@/lib/hooks/use-repos";
@@ -24,10 +24,12 @@ import { cn } from "@/lib/utils/cn";
  * Global shortcuts (registered here, active across the whole dashboard):
  *   Ctrl/⌘+K       toggle palette
  *   Ctrl/⌘+Shift+O new chat
- *   Ctrl/⌘+\       toggle conversation panel (chat space)
+ *   Ctrl/⌘+\       fold / unfold the sidebar
  */
 export function CommandPalette() {
-  const [open, setOpen] = useState(false);
+  // Shared with the sidebar's search button, which opens this same palette.
+  const open = useUIStore((s) => s.paletteOpen);
+  const setOpen = useUIStore((s) => s.setPaletteOpen);
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const router = useRouter();
@@ -72,8 +74,9 @@ export function CommandPalette() {
         e.preventDefault();
         newChat();
       } else if (mod && e.key === "\\") {
+        // The sidebar is on every page now, so the shortcut works everywhere.
         e.preventDefault();
-        if (pathname.startsWith("/chat")) toggleSidebar();
+        toggleSidebar();
       }
     }
     window.addEventListener("keydown", down);
@@ -105,7 +108,8 @@ export function CommandPalette() {
     { label: "Go to Chat", icon: MessageSquare, fn: () => router.push("/chat") },
     { label: "Go to Knowledge", icon: FolderGit2, fn: () => router.push("/repos") },
     { label: "Go to Code Search", icon: SearchIcon, fn: () => router.push("/search") },
-    { label: "Go to Settings", icon: Settings, fn: () => router.push("/settings/keys") },
+    { label: "Go to Settings", icon: Settings, fn: () => router.push("/settings") },
+    { label: "Go to API keys", icon: KeyRound, fn: () => router.push("/settings/keys") },
     { label: "Open Library", icon: Library, fn: () => router.push("/library") },
     { label: "Theme: Dark", icon: Moon, fn: () => setTheme("dark") },
     { label: "Theme: Light", icon: Sun, fn: () => setTheme("light") },

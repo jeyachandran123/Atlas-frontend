@@ -33,14 +33,19 @@ export const libraryApi = {
    * from the bucket, or — when storage cannot sign — an object URL of the
    * bytes (`revoke` says to release it afterwards).
    */
-  download: async (item: LibraryItem): Promise<{ url: string; filename: string; revoke: boolean }> => {
-    const res = await fetch(`${API_BASE}/library/${item.kind}/${encodeURIComponent(item.id)}/download`, {
+  download: (item: LibraryItem) => libraryApi.downloadById(item.kind, item.id, item.filename),
+
+  /** The same, for a file known only by its kind and id (e.g. from a chat message). */
+  downloadById: async (
+    kind: LibraryKind, id: string, fallbackName: string,
+  ): Promise<{ url: string; filename: string; revoke: boolean }> => {
+    const res = await fetch(`${API_BASE}/library/${kind}/${encodeURIComponent(id)}/download`, {
       headers: authHeaders(),
     });
     if (!res.ok) throw new Error(`Download failed (${res.status})`);
     const info = (await res.json()) as { mode: string; url?: string | null; filename: string };
     if (info.mode === "signed_url" && info.url) return { url: info.url, filename: info.filename, revoke: false };
-    return { url: await fileBlobUrl(item), filename: info.filename || item.filename, revoke: true };
+    return { url: await fileBlobUrl({ kind, id }), filename: info.filename || fallbackName, revoke: true };
   },
 
   /** An image preview when there is no signed link to use. */
