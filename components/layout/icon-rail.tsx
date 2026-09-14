@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   MessageSquare, FolderGit2, Search, Settings,
-  Sun, Moon, Monitor, LogOut, ImageIcon, BookOpenText,
+  Sun, Moon, Monitor, LogOut, Library, BookOpenText,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
@@ -25,8 +25,6 @@ const THEME_LABELS = { dark: "Dark", light: "Light", system: "System" } as const
 export function IconRail() {
   const pathname = usePathname();
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
-  const toggleGallery = useUIStore((s) => s.toggleGallery);
-  const galleryOpen = useUIStore((s) => s.galleryOpen);
   const { theme, setTheme } = useTheme();
   const ThemeIcon = THEME_ICONS[theme];
   const logout = useLogout();
@@ -111,10 +109,10 @@ export function IconRail() {
           </Link>
         </Tooltip>
 
-        <Tooltip content="Gallery" side="right">
-          <button onClick={toggleGallery} aria-label="Toggle gallery" aria-pressed={galleryOpen} className="rail-item-wrap">
-            <RailItem icon={ImageIcon} active={galleryOpen} />
-          </button>
+        <Tooltip content="Library — everything you shared and created" side="right">
+          <Link href="/library" aria-label="Library" className="rail-item-wrap">
+            <RailItem icon={Library} active={pathname.startsWith("/library")} />
+          </Link>
         </Tooltip>
 
         {/* Bottom cluster */}

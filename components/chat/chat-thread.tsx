@@ -23,6 +23,8 @@ export function ChatThread() {
   const streamingConversationId = useChatStore((s) => s.streamingConversationId);
   const streamingContent = useChatStore((s) => s.streamingContent);
   const streamingReasoning = useChatStore((s) => s.streamingReasoning);
+  const streamingFileStage = useChatStore((s) => s.streamingFileStage);
+  const streamingFile = useChatStore((s) => s.streamingFile);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const activeToolCall = useChatStore((s) => s.activeToolCall);
   const streamError = useChatStore((s) => s.streamError);
@@ -259,6 +261,11 @@ export function ChatThread() {
                         : undefined}
                       onDelete={m.role === "user" && !isActiveStream ? (id) => deleteMessage(id) : undefined}
                       isLastUserWithoutReply={m.role === "user" && i === lastUnansweredUserIdx && !isActiveStream}
+                      isLast={i === messages.length - 1 && !isActiveStream}
+                      onClarifySubmit={(text) => {
+                        scrollToBottom("smooth");
+                        send(text, selectedRepoId ?? undefined, useChatStore.getState().agentMode);
+                      }}
                     />
                   </div>
                 ))}
@@ -269,7 +276,7 @@ export function ChatThread() {
                   )}
 
                 {(isActiveStream || activeStreamContent) && (
-                  <StreamingMessageBubble content={activeStreamContent} activeToolCall={activeToolCall} reasoning={isActiveStream ? streamingReasoning : ""} />
+                  <StreamingMessageBubble content={activeStreamContent} activeToolCall={activeToolCall} reasoning={isActiveStream ? streamingReasoning : ""} fileStage={isActiveStream ? streamingFileStage : null} file={streamingConversationId === activeConversationId ? streamingFile : null} />
                 )}
 
                 {showStreamError && (

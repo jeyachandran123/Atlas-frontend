@@ -113,9 +113,13 @@ export function useCreateConversation() {
  */
 export function useStreamChat() {
   const queryClient = useQueryClient();
-  const { startStream, applyStreamEvent, endStream, activeConversationId, setActiveConversation, addMessageImages } =
-    useChatStore();
+  const {
+    startStream, applyStreamEvent, endStream, activeConversationId, setActiveConversation,
+    addMessageImages, adoptStreamConversation, transferMessageImages,
+  } = useChatStore();
   const controllerRef = useRef<AbortController | null>(null);
+  /** Temporary message id → the id the server saved it under. */
+  const realIdsRef = useRef(new Map<string, string>());
 
   const send = useCallback(
     (message: string, repoId?: string, agentMode: string = "auto", files?: File[]) => {
@@ -205,13 +209,39 @@ export function useStreamChat() {
       const controller = streamChatMessage(
         payload,
         (event) => {
+          if (event.type === "meta") {
+            // The server has saved the prompt. Swap the temporary id for the
+            // real one now, so edit / retry / delete act on the saved message
+            // even when this reply is stopped before it finishes.
+            const realId = event.user_message_id;
+            const convId = event.conversation_id;
+            realIdsRef.current.set(optimisticUserMessage.id, realId);
+            if (!conversationId && convId) {
+              adoptStreamConversation(convId);
+              if (typeof window !== "undefined" && window.location.pathname === "/chat") {
+                window.history.replaceState(null, "", `/chat/${convId}`);
+              }
+            }
+            queryClient.setQueryData<MessageOut[]>(chatKeys.messages(convId), (old) =>
+              old?.map((m) =>
+                m.id === optimisticUserMessage.id ? { ...m, id: realId, conversation_id: convId } : m,
+              ),
+            );
+            transferMessageImages(optimisticUserMessage.id, realId);
+            return;
+          }
           if (event.type === "done" || event.type === "error") {
             // Adopt the conversation even on error — the backend has already
             // created it and saved the user message. Without this, every
             // failed send would spawn a brand-new conversation.
             // (Runs BEFORE applyStreamEvent: setActiveConversation resets
             // streamError, which would otherwise hide the error banner.)
-            if (!activeConversationId && event.conversation_id) {
+            // Already adopted when the turn's meta event arrived — adopting
+            // again would clear the reply that was just streamed.
+            if (
+              !activeConversationId && event.conversation_id
+              && useChatStore.getState().activeConversationId !== event.conversation_id
+            ) {
               setActiveConversation(event.conversation_id);
               // ChatGPT-style URL adoption: swap /chat → /chat/{id} in place.
               // history.replaceState avoids a route remount, so the streamed
@@ -226,6 +256,8 @@ export function useStreamChat() {
               queryClient.invalidateQueries({ queryKey: chatKeys.messages(finalConvId) });
             }
             queryClient.invalidateQueries({ queryKey: ["conversations"] });
+            // Uploads and created files belong in the Library as soon as they exist.
+            queryClient.invalidateQueries({ queryKey: ["library"] });
           }
           applyStreamEvent(event);
         },
@@ -240,7 +272,53 @@ export function useStreamChat() {
       controllerRef.current = controller;
       startStream(controller, optimisticUserMessage, conversationId ?? null);
     },
-    [activeConversationId, applyStreamEvent, endStream, queryClient, setActiveConversation, startStream, addMessageImages],
+    [
+      activeConversationId, applyStreamEvent, endStream, queryClient, setActiveConversation,
+      startStream, addMessageImages, adoptStreamConversation, transferMessageImages,
+    ],
+  );
+
+  /**
+   * The saved id of a message the list may still hold under its temporary one.
+   *
+   * A stopped reply never reaches "done", so its prompt can stay in the list as
+   * `optimistic-…` although the server saved it. Acting on that temporary id
+   * used to skip the server entirely: the saved prompt survived an edit and
+   * showed up twice. The meta event normally supplies the real id; when the
+   * stop came even before that, the saved prompt is found by its text.
+   * null means nothing was saved.
+   */
+  const savedId = useCallback(
+    async (conversationId: string, messageId: string, content?: string): Promise<string | null> => {
+      if (!messageId.startsWith("optimistic-")) return messageId;
+      const known = realIdsRef.current.get(messageId);
+      if (known) return known;
+      const text = content
+        ?? queryClient.getQueryData<MessageOut[]>(chatKeys.messages(conversationId))
+          ?.find((m) => m.id === messageId)?.content
+        ?? useChatStore.getState().optimisticUserMessage?.content;
+      if (!text) return null;
+      try {
+        const saved = await chatApi.getMessages(conversationId);
+        return [...saved].reverse().find((m) => m.role === "user" && m.content === text)?.id ?? null;
+      } catch {
+        return null;
+      }
+    },
+    [queryClient],
+  );
+
+  /** Remove a message and everything after it — on the server and in the list. */
+  const truncateFrom = useCallback(
+    async (conversationId: string, messageId: string, content?: string) => {
+      const id = await savedId(conversationId, messageId, content);
+      if (id) await chatApi.truncateMessagesFrom(conversationId, id);
+      queryClient.setQueryData<MessageOut[]>(chatKeys.messages(conversationId), (old = []) => {
+        const idx = old.findIndex((m) => m.id === messageId || m.id === id);
+        return idx === -1 ? old : old.slice(0, idx);
+      });
+    },
+    [queryClient, savedId],
   );
 
   /**
@@ -251,62 +329,38 @@ export function useStreamChat() {
     async (messageId: string, newText: string, repoId?: string) => {
       const conversationId = activeConversationId;
       if (!conversationId) return;
-
-      const isOptimistic = messageId.startsWith("optimistic-");
-
-      if (!isOptimistic) {
-        // Real DB message — truncate from this point
-        await chatApi.truncateMessagesFrom(conversationId, messageId);
-      }
-
-      // Remove from local cache from this message onwards
-      queryClient.setQueryData<MessageOut[]>(chatKeys.messages(conversationId), (old = []) => {
-        const idx = old.findIndex((m) => m.id === messageId);
-        return idx === -1 ? old : old.slice(0, idx);
-      });
-
+      await truncateFrom(conversationId, messageId);
       send(newText, repoId, "auto");
     },
-    [activeConversationId, queryClient, send],
+    [activeConversationId, send, truncateFrom],
   );
 
   const retry = useCallback(
     async (messageId: string, content: string, repoId?: string) => {
       const conversationId = activeConversationId;
       if (!conversationId) return;
-
-      const isOptimistic = messageId.startsWith("optimistic-");
-
-      if (!isOptimistic) {
-        await chatApi.truncateMessagesFrom(conversationId, messageId);
-      }
-
-      queryClient.setQueryData<MessageOut[]>(chatKeys.messages(conversationId), (old = []) => {
-        const idx = old.findIndex((m) => m.id === messageId);
-        return idx === -1 ? old : old.slice(0, idx);
-      });
-
+      await truncateFrom(conversationId, messageId, content);
       send(content, repoId, "auto");
     },
-    [activeConversationId, queryClient, send],
+    [activeConversationId, send, truncateFrom],
   );
 
   const stop = useCallback(() => {
     controllerRef.current?.abort();
-  }, []);
+    // The prompt was saved before the reply began: bring the list in line with
+    // the server, so the stopped prompt carries its real id from here on.
+    const convId = useChatStore.getState().activeConversationId;
+    if (convId) void queryClient.invalidateQueries({ queryKey: chatKeys.messages(convId) });
+  }, [queryClient]);
 
   const deleteMessage = useCallback(
     async (messageId: string) => {
       const conversationId = activeConversationId;
       if (!conversationId) return;
-      // Use truncateMessagesFrom so the user message + its assistant reply are both deleted
-      await chatApi.truncateMessagesFrom(conversationId, messageId);
-      queryClient.setQueryData<MessageOut[]>(chatKeys.messages(conversationId), (old = []) => {
-        const idx = old.findIndex((m) => m.id === messageId);
-        return idx === -1 ? old : old.slice(0, idx);
-      });
+      // Truncating removes the user message and its reply together
+      await truncateFrom(conversationId, messageId);
     },
-    [activeConversationId, queryClient],
+    [activeConversationId, truncateFrom],
   );
 
   return { send, editAndResend, retry, deleteMessage, stop };

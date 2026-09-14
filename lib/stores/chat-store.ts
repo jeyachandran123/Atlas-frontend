@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ChatStreamEvent, MessageOut, AgentMode } from "@/types/api";
+import type { ChatFilePayload, ChatStreamEvent, MessageOut, AgentMode } from "@/types/api";
 
 export interface ActiveToolCall {
   toolName: string;
@@ -34,12 +34,18 @@ interface ChatState {
   setThinking: (value: boolean | null) => void;
   /** The model's reasoning for the message being streamed — never saved. */
   streamingReasoning: string;
+  /** What the file being made is doing right now, e.g. "building_file". */
+  streamingFileStage: string | null;
+  /** The file this turn made, shown live while its overview streams in. */
+  streamingFile: ChatFilePayload | null;
   /** Maps message ID → image previews for display */
   messageImages: Record<string, MessageImage[]>;
   /** All images uploaded across all conversations (gallery) */
   galleryImages: MessageImage[];
 
   setActiveConversation: (id: string | null) => void;
+  /** A new chat learns its id mid-stream: follow it without clearing the stream. */
+  adoptStreamConversation: (id: string) => void;
   setSelectedRepo: (repoId: string | null) => void;
   setAgentMode: (mode: AgentMode) => void;
   startStream: (controller: AbortController, userMessage: MessageOut, conversationId: string | null) => void;
@@ -73,11 +79,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
   agentMode: "auto",
   thinking: null,
   streamingReasoning: "",
+  streamingFileStage: null,
+  streamingFile: null,
   messageImages: {},
   galleryImages: [],
 
   setActiveConversation: (id) =>
     set({ activeConversationId: id, streamingContent: "", streamingReasoning: "", streamError: null }),
+
+  adoptStreamConversation: (id) => set({ activeConversationId: id, streamingConversationId: id }),
 
   setSelectedRepo: (repoId) => set({ selectedRepoId: repoId }),
 
@@ -91,6 +101,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       streamingConversationId: conversationId,
       streamingContent: "",
       streamingReasoning: "",
+      streamingFileStage: null,
+      streamingFile: null,
       streamError: null,
       activeToolCall: null,
       abortController: controller,
@@ -99,6 +111,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   applyStreamEvent: (event) => {
     switch (event.type) {
+      case "file_stage":
+        set({ streamingFileStage: event.stage });
+        break;
+      case "file":
+        set({ streamingFile: { ...event }, streamingFileStage: null });
+        break;
       case "reasoning":
         set((s) => ({ streamingReasoning: s.streamingReasoning + event.content }));
         break;
@@ -123,14 +141,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  endStream: () => set({ isStreaming: false, activeToolCall: null, abortController: null }),
+  endStream: () => set({ isStreaming: false, activeToolCall: null, abortController: null, streamingFileStage: null }),
 
   stopStream: () => {
     get().abortController?.abort();
     set({ isStreaming: false, activeToolCall: null, abortController: null });
   },
 
-  resetStreamingContent: () => set({ streamingContent: "", streamingReasoning: "" }),
+  resetStreamingContent: () =>
+    set({ streamingContent: "", streamingReasoning: "", streamingFileStage: null, streamingFile: null }),
   
   clearOptimisticMessage: () => set({ optimisticUserMessage: null }),
 

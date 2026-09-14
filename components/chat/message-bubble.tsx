@@ -3,6 +3,8 @@
 import { Copy, Check, RotateCcw, Pencil, Trash2, FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { MessageMarkdown } from "@/components/chat/message-markdown";
+import { ClarifyCard, type ClarifyPayload } from "@/components/chat/clarify-card";
+import { ChatFileCard, type ChatFilePayload } from "@/components/chat/chat-file-card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatTokenCount } from "@/lib/utils/format";
 import { useChatStore } from "@/lib/stores/chat-store";
@@ -40,12 +42,17 @@ export function MessageBubble({
   onEdit,
   onDelete,
   isLastUserWithoutReply,
+  isLast,
+  onClarifySubmit,
 }: {
   message: MessageOut;
   onRetry?: (id: string, content: string) => void;
   onEdit?: (id: string, newContent: string) => void;
   onDelete?: (id: string) => void;
   isLastUserWithoutReply?: boolean;
+  /** The newest message in the thread — only then is a question card live. */
+  isLast?: boolean;
+  onClarifySubmit?: (text: string) => void;
 }) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
@@ -259,7 +266,7 @@ export function MessageBubble({
                     ))}
                   </div>
                 )}
-                {message.content && <p className="whitespace-pre-wrap">{message.content}</p>}
+                {message.content && <UserText content={message.content} />}
               </div>
             )}
             {/* Fullscreen image viewer */}
@@ -311,20 +318,21 @@ export function MessageBubble({
     <div className="flex gap-3 animate-fade-in-up">
       <AtlasAvatar />
       <div className="group flex min-w-0 flex-1 flex-col gap-1.5">
-        <div className="assistant-content min-w-0 w-full">
-          <MessageMarkdown content={message.content} />
-        </div>
+        <AssistantBody message={message} isLast={!!isLast} onClarifySubmit={onClarifySubmit} />
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           {message.tokens_used > 0 && (
             <span className="mr-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
               {formatTokenCount(message.tokens_used)} tokens
             </span>
           )}
-          <ActionBtn onClick={handleCopy} title="Copy">
-            {copied
-              ? <Check className="size-3.5" style={{ color: "var(--success)" }} />
-              : <Copy className="size-3.5" />}
-          </ActionBtn>
+          {/* A question or file card is stored as JSON — copying it would hand over raw JSON. */}
+          {message.agent_used !== "clarifier" && message.agent_used !== "file_artifact" && (
+            <ActionBtn onClick={handleCopy} title="Copy">
+              {copied
+                ? <Check className="size-3.5" style={{ color: "var(--success)" }} />
+                : <Copy className="size-3.5" />}
+            </ActionBtn>
+          )}
         </div>
       </div>
     </div>
@@ -346,5 +354,86 @@ function ActionBtn({ onClick, title, danger, children }: {
     >
       {children}
     </button>
+  );
+}
+
+/** A created file, and the note written about what is inside it. */
+function FileReply({ data }: { data: ChatFilePayload }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-3">
+      <ChatFileCard data={data} />
+      {data.summary && (
+        <div className="assistant-content min-w-0 w-full">
+          <MessageMarkdown content={data.summary} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CHOICES_PREFIX = "Here are my choices:";
+
+/**
+ * What the user wrote — or, for answers sent from a question card, those
+ * answers laid out as answers rather than as a block of arrows.
+ */
+function UserText({ content }: { content: string }) {
+  const rows = content.startsWith(CHOICES_PREFIX)
+    ? content
+        .slice(CHOICES_PREFIX.length)
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((l) => /^\d+\.\s*(.*?)\s*→\s*(.+)$/.exec(l))
+    : [];
+  if (rows.length === 0 || rows.some((r) => !r)) {
+    return <p className="whitespace-pre-wrap">{content}</p>;
+  }
+  return (
+    <div className="flex flex-col gap-2 py-0.5">
+      <p className="text-[10.5px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+        My choices
+      </p>
+      {rows.map((r, i) => (
+        <div key={i} className="flex flex-col gap-0.5">
+          <span className="text-[12px] leading-snug" style={{ color: "var(--text-tertiary)" }}>{r![1]}</span>
+          <span className="flex items-center gap-1.5 text-[13.5px] font-medium" style={{ color: "var(--text-primary)" }}>
+            <Check className="size-3.5 shrink-0" style={{ color: "var(--accent-bright)" }} />
+            {r![2]}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Questions and files are stored as JSON on the message — so they survive a
+ * reload intact — and drawn as cards. Everything else is markdown.
+ */
+function AssistantBody({
+  message, isLast, onClarifySubmit,
+}: {
+  message: MessageOut;
+  isLast: boolean;
+  onClarifySubmit?: (text: string) => void;
+}) {
+  if (message.agent_used === "clarifier" || message.agent_used === "file_artifact") {
+    let data: unknown = null;
+    try {
+      data = JSON.parse(message.content);
+    } catch {
+      data = null;
+    }
+    if (data && typeof data === "object") {
+      return message.agent_used === "clarifier"
+        ? <ClarifyCard data={data as ClarifyPayload} interactive={isLast} onSubmit={onClarifySubmit} />
+        : <FileReply data={data as ChatFilePayload} />;
+    }
+  }
+  return (
+    <div className="assistant-content min-w-0 w-full">
+      <MessageMarkdown content={message.content} />
+    </div>
   );
 }

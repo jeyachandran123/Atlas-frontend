@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { Command } from "cmdk";
 import {
   MessageSquare, FolderGit2, Search as SearchIcon, Settings,
-  Plus, FileCode2, ImageIcon, Moon, Sun, Monitor, Loader2, CornerDownLeft,
+  Plus, FileCode2, Library, Moon, Sun, Monitor, Loader2, CornerDownLeft,
 } from "lucide-react";
 import { useConversations } from "@/lib/hooks/use-chat";
 import { useRepos } from "@/lib/hooks/use-repos";
@@ -38,7 +38,6 @@ export function CommandPalette() {
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const selectedRepoId = useChatStore((s) => s.selectedRepoId);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
-  const toggleGallery = useUIStore((s) => s.toggleGallery);
   const { setTheme } = useTheme();
 
   // Code-search scope: chat's grounded repo first, else the first ready repo.
@@ -107,12 +106,12 @@ export function CommandPalette() {
     { label: "Go to Knowledge", icon: FolderGit2, fn: () => router.push("/repos") },
     { label: "Go to Code Search", icon: SearchIcon, fn: () => router.push("/search") },
     { label: "Go to Settings", icon: Settings, fn: () => router.push("/settings/keys") },
-    { label: "Toggle gallery", icon: ImageIcon, fn: toggleGallery },
+    { label: "Open Library", icon: Library, fn: () => router.push("/library") },
     { label: "Theme: Dark", icon: Moon, fn: () => setTheme("dark") },
     { label: "Theme: Light", icon: Sun, fn: () => setTheme("light") },
     { label: "Theme: System", icon: Monitor, fn: () => setTheme("system") },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ]), [router, toggleGallery, setTheme]);
+  ]), [router, setTheme]);
 
   const visibleActions = actions.filter((a) => matches(a.label));
   const visibleConvs = conversations

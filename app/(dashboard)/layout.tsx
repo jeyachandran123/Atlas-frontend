@@ -6,7 +6,6 @@ import { Loader2, PanelLeft } from "lucide-react";
 import { IconRail } from "@/components/layout/icon-rail";
 import { ContextPanel } from "@/components/layout/context-panel";
 import { CommandPalette } from "@/components/command/command-palette";
-import { ImageGalleryPanel } from "@/components/chat/image-gallery-panel";
 import { useCurrentUser } from "@/lib/hooks/use-auth";
 import { setAccessToken } from "@/lib/api/token-store";
 import { scheduleProactiveRefresh } from "@/lib/api/client";
@@ -56,8 +55,6 @@ function useSessionBootstrap() {
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const status = useSessionBootstrap();
-  const galleryOpen = useUIStore((s) => s.galleryOpen);
-  const setGalleryOpen = useUIStore((s) => s.setGalleryOpen);
   const panelCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const pathname = usePathname();
@@ -88,7 +85,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <PanelLeft className="size-[15px]" />
           </button>
         )}
-        {galleryOpen && <ImageGalleryPanel onClose={() => setGalleryOpen(false)} />}
         <main className="flex-1 overflow-hidden">{children}</main>
       </div>
     </SessionGate>

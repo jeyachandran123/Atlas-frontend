@@ -207,11 +207,35 @@ export interface ChatResponse {
   context_chunks_used: number;
 }
 
+/** A file the assistant made — stored as JSON on its message (agent_used "file_artifact"). */
+export interface ChatFilePayload {
+  artifact_id?: string | null;
+  title?: string | null;
+  filename?: string | null;
+  format?: string | null;
+  size_bytes?: number | null;
+  status?: string | null;
+  error?: string | null;
+  /** attachment | conversation | knowledge — where the content came from. */
+  source?: string | null;
+  based_on?: string | null;
+  /** A short written overview of what the file contains (markdown). */
+  summary?: string | null;
+}
+
 // SSE stream event union — matches chat/router.py event_generator exactly
 export type ChatStreamEvent =
+  /** First event of every turn: where the user's message was saved. */
+  | { type: "meta"; conversation_id: string; user_message_id: string }
   | { type: "token"; content: string }
   /** The model's thinking, streamed apart from the answer. Never saved. */
   | { type: "reasoning"; content: string }
+  /** Progress while a file is being made. */
+  | { type: "file_stage"; stage: string; format?: string }
+  /** Questions to answer before a file is made (also saved as a message). */
+  | { type: "clarify"; questions: unknown[]; intro?: string }
+  /** A finished file (also saved as a message). */
+  | ({ type: "file" } & ChatFilePayload)
   | { type: "tool_call"; tool_name: string; rationale?: string }
   | {
       type: "done";
@@ -230,6 +254,39 @@ export type ChatStreamEvent =
   // conversation_id lets the client adopt the conversation even when the
   // stream fails — otherwise every retry would spawn a new conversation
   | { type: "error"; message: string; conversation_id?: string };
+
+// ── Library — mirrors app/api/v1/library/router.py ───────────────────────
+
+export type LibraryKind = "image" | "document" | "created";
+
+export interface LibraryItem {
+  id: string;
+  kind: LibraryKind;
+  name: string;
+  filename: string;
+  /** File extension, lower-case: "pdf", "xlsx", "png"… */
+  format: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: string;
+  conversation_id: string | null;
+  conversation_title: string | null;
+  width: number | null;
+  height: number | null;
+  page_count: number | null;
+  /** Created files: "chat" when made in a chat. */
+  origin: string | null;
+  /** A short-lived signed link for an image preview, when storage can mint one. */
+  preview_url: string | null;
+}
+
+export interface LibraryPage {
+  items: LibraryItem[];
+  total: number;
+  counts: Record<LibraryKind, number>;
+  limit: number;
+  offset: number;
+}
 
 // ── Search & Retrieval ───────────────────────────────────────────────────
 
