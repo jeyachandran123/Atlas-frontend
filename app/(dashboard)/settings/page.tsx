@@ -7,6 +7,7 @@ import { SignInMethods } from "@/components/auth/sign-in-methods";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useTheme } from "@/app/providers";
 import { CardSkeleton } from "@/components/ui/skeleton";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 const THEMES = [
   { id: "dark", label: "Dark", Icon: Moon },
@@ -27,7 +28,6 @@ export default function SettingsPage() {
   const [confirmLogout, setConfirmLogout] = useState(false);
 
   const name = user?.full_name?.trim() || user?.email?.split("@")[0] || "Account";
-  const initials = name.split(/\s+/).filter(Boolean).map((p) => p[0]).join("").slice(0, 2).toUpperCase() || "U";
   const memberSince = user?.created_at
     ? new Date(user.created_at).toLocaleDateString(undefined, { month: "long", year: "numeric" })
     : null;
@@ -53,13 +53,7 @@ export default function SettingsPage() {
           ) : (
             <div className="rounded-xl p-4" style={CARD_STYLE}>
               <div className="flex items-center gap-3.5">
-                <span
-                  className="flex size-11 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold text-white"
-                  style={{ background: "var(--accent-gradient)" }}
-                  aria-hidden
-                >
-                  {initials}
-                </span>
+                <UserAvatar name={name} src={user?.avatar_url} className="size-11 text-[15px]" />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate text-[14px] font-semibold" style={{ color: "var(--text-primary)" }}>{name}</p>

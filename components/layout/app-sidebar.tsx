@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils/cn";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { ConversationList } from "@/components/layout/conversation-list";
 import { LogoutDialog } from "@/components/auth/logout-dialog";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { useUIStore } from "@/lib/stores/ui-store";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useAuthStore } from "@/lib/stores/auth-store";
@@ -238,16 +239,7 @@ function AccountMenu({ collapsed, onLogout }: { collapsed: boolean; onLogout: ()
   const router = useRouter();
 
   const name = user?.full_name?.trim() || user?.email?.split("@")[0] || "Account";
-  const initials = name.split(/\s+/).filter(Boolean).map((p) => p[0]).join("").slice(0, 2).toUpperCase() || "U";
-  const avatar = (
-    <span
-      className="flex size-8 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold text-white"
-      style={{ background: "var(--accent-gradient)" }}
-      aria-hidden
-    >
-      {initials}
-    </span>
-  );
+  const avatar = <UserAvatar name={name} src={user?.avatar_url} className="size-8 text-[12px]" />;
 
   return (
     // Not modal: opening the log-out dialog from a menu item must not leave

@@ -38,6 +38,8 @@ export interface UserOut {
   has_password?: boolean;
   /** How the account was first created: "email", "google", … */
   auth_provider?: string | null;
+  /** Profile photo from the sign-in provider (Google); null for email-only accounts. */
+  avatar_url?: string | null;
 }
 
 export interface LoginRequest {

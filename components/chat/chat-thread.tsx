@@ -5,7 +5,7 @@ import { RotateCcw, Share2, Check, AlertCircle } from "lucide-react";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { StreamingMessageBubble } from "@/components/chat/streaming-message-bubble";
 import { ChatInput } from "@/components/chat/chat-input";
-import { QuickActions } from "@/components/chat/quick-actions";
+import { QuickActions, type QuickStart } from "@/components/chat/quick-actions";
 import { PromptNavigator, type PromptEntry } from "@/components/chat/prompt-navigator";
 import { ScrollToBottomButton } from "@/components/chat/scroll-to-bottom";
 import { ChatMessagesSkeleton } from "@/components/ui/skeleton";
@@ -50,6 +50,13 @@ export function ChatThread() {
 
   function handleRetry(messageId: string, content: string) {
     retry(messageId, content, selectedRepoId ?? undefined);
+  }
+
+  // A quick-start card fills the prompt box and picks the mode — it never sends.
+  function startFromCard(start: QuickStart) {
+    const store = useChatStore.getState();
+    store.setAgentMode(start.mode);
+    store.setComposerDraft({ text: start.text, files: start.files });
   }
 
   function handleEdit(messageId: string, newContent: string) {
@@ -238,7 +245,7 @@ export function ChatThread() {
           onTouchMove={handleTouchMove}
         >
           {isEmpty ? (
-            <EmptyState onPick={(t) => send(t, selectedRepoId ?? undefined, "auto")} />
+            <EmptyState onStart={startFromCard} />
           ) : isLoading && messages.length === 0 && !showOptimistic ? (
             <div className="mx-auto max-w-[768px] px-6 py-8">
               <ChatMessagesSkeleton />
@@ -362,7 +369,7 @@ function greeting(): string {
   return "Good evening";
 }
 
-function EmptyState({ onPick }: { onPick: (t: string) => void }) {
+function EmptyState({ onStart }: { onStart: (start: QuickStart) => void }) {
   const user = useAuthStore((s) => s.user);
   const firstName = user?.full_name?.split(" ")[0];
 
@@ -411,13 +418,14 @@ function EmptyState({ onPick }: { onPick: (t: string) => void }) {
             className="mt-3 max-w-[420px] text-[14px] leading-relaxed"
             style={{ color: "var(--text-tertiary)" }}
           >
-            Ask me anything about your codebase — I read files, search semantically, and check git history.
+            Ask anything — or bring a document, a spreadsheet or your code, and I&apos;ll answer from it,
+            analyse it, or turn it into a file.
           </p>
         </div>
 
         {/* Quick actions */}
         <div className="animate-fade-up" style={{ animationDelay: "80ms" }}>
-          <QuickActions onPick={onPick} />
+          <QuickActions onPick={onStart} />
         </div>
       </div>
     </div>

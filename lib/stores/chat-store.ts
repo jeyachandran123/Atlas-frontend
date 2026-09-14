@@ -18,6 +18,13 @@ export interface MessageImage {
   isDocument?: boolean;
 }
 
+/** What a quick-start card hands the prompt box. `nonce` makes each hand-off distinct. */
+export interface ComposerDraft {
+  text: string;
+  files?: File[];
+  nonce: number;
+}
+
 interface ChatState {
   activeConversationId: string | null;
   streamingConversationId: string | null;
@@ -38,6 +45,8 @@ interface ChatState {
   streamingFileStage: string | null;
   /** The file this turn made, shown live while its overview streams in. */
   streamingFile: ChatFilePayload | null;
+  /** Text (and files) a quick-start card puts in the prompt box — taken once by ChatInput. */
+  composerDraft: ComposerDraft | null;
   /** Maps message ID → image previews for display */
   messageImages: Record<string, MessageImage[]>;
   /** All images uploaded across all conversations (gallery) */
@@ -46,6 +55,7 @@ interface ChatState {
   setActiveConversation: (id: string | null) => void;
   /** A new chat learns its id mid-stream: follow it without clearing the stream. */
   adoptStreamConversation: (id: string) => void;
+  setComposerDraft: (draft: { text: string; files?: File[] } | null) => void;
   setSelectedRepo: (repoId: string | null) => void;
   setAgentMode: (mode: AgentMode) => void;
   startStream: (controller: AbortController, userMessage: MessageOut, conversationId: string | null) => void;
@@ -81,6 +91,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamingReasoning: "",
   streamingFileStage: null,
   streamingFile: null,
+  composerDraft: null,
   messageImages: {},
   galleryImages: [],
 
@@ -88,6 +99,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ activeConversationId: id, streamingContent: "", streamingReasoning: "", streamError: null }),
 
   adoptStreamConversation: (id) => set({ activeConversationId: id, streamingConversationId: id }),
+
+  setComposerDraft: (draft) => set({ composerDraft: draft ? { ...draft, nonce: Date.now() } : null }),
 
   setSelectedRepo: (repoId) => set({ selectedRepoId: repoId }),
 
