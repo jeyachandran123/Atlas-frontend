@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -11,7 +12,7 @@ import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { useUIStore } from "@/lib/stores/ui-store";
 import { useRepos } from "@/lib/hooks/use-repos";
 import { useTheme } from "@/app/providers";
-import { useLogout } from "@/lib/hooks/use-auth";
+import { LogoutDialog } from "@/components/auth/logout-dialog";
 
 const THEME_CYCLE: Array<"dark" | "light" | "system"> = ["dark", "light", "system"];
 const THEME_ICONS = { dark: Moon, light: Sun, system: Monitor } as const;
@@ -27,7 +28,7 @@ export function IconRail() {
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const { theme, setTheme } = useTheme();
   const ThemeIcon = THEME_ICONS[theme];
-  const logout = useLogout();
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   // Global index status: pulse the Knowledge icon while any repo is indexing.
   const { data: repos = [] } = useRepos();
@@ -129,14 +130,14 @@ export function IconRail() {
           </Tooltip>
           <Tooltip content="Sign out" side="right">
             <button
-              onClick={() => logout.mutate()}
-              disabled={logout.isPending}
+              onClick={() => setConfirmLogout(true)}
               aria-label="Sign out"
               className="icon-btn danger size-8"
             >
               <LogOut className="size-[14px]" />
             </button>
           </Tooltip>
+          <LogoutDialog open={confirmLogout} onOpenChange={setConfirmLogout} />
         </div>
       </nav>
     </TooltipProvider>
