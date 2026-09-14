@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DashboardSkeleton, TableRowsSkeleton } from "@/components/ui/skeleton";
 import { BookmarkButton } from "@/components/workspace/bookmark-button";
 import { workspaceApi } from "@/lib/api/workspace";
 import { isFailed, isProcessing, isReady } from "@/lib/documents/processing-status";
@@ -45,10 +46,10 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
   const wsId = workspace.id;
 
   const { data: dashboard, isLoading } = useWorkspaceDashboard(wsId);
-  const { data: documents = [] } = useWorkspaceDocuments(wsId);
-  const { data: artifacts = [] } = useWorkspaceArtifacts(wsId);
-  const { data: bookmarks = [] } = useWorkspaceBookmarks(wsId);
-  const { data: timeline = [] } = useWorkspaceTimeline(wsId);
+  const { data: documents = [], isLoading: documentsLoading } = useWorkspaceDocuments(wsId);
+  const { data: artifacts = [], isLoading: artifactsLoading } = useWorkspaceArtifacts(wsId);
+  const { data: bookmarks = [], isLoading: bookmarksLoading } = useWorkspaceBookmarks(wsId);
+  const { data: timeline = [], isLoading: timelineLoading } = useWorkspaceTimeline(wsId);
   const fileInput = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<WorkspaceDocument | null>(null);
@@ -184,7 +185,7 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-8 py-6">
-        {isLoading && <Loader2 className="mx-auto mt-10 size-5 animate-spin" style={{ color: "var(--text-muted)" }} />}
+        {isLoading && tab === "overview" && <DashboardSkeleton />}
 
         {tab === "overview" && dashboard && (
           <div className="mx-auto max-w-3xl">
@@ -258,7 +259,9 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
               </Button>
               <input ref={fileInput} type="file" multiple hidden onChange={(e) => upload(e.target.files)} />
             </div>
-            {documents.length === 0 ? (
+            {documentsLoading ? (
+              <TableRowsSkeleton />
+            ) : documents.length === 0 ? (
               <EmptyState icon={FileText} text="No documents yet. Upload PDFs, Word, Excel, or text files to build your knowledge base." />
             ) : (
               <div className="flex flex-col gap-1.5">
@@ -280,7 +283,9 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
 
         {tab === "generated" && (
           <div className="mx-auto max-w-3xl">
-            {artifacts.length === 0 ? (
+            {artifactsLoading ? (
+              <TableRowsSkeleton />
+            ) : artifacts.length === 0 ? (
               <EmptyState icon={Sparkles} text="No generated documents yet. Use Generate inside a conversation to create PDFs, spreadsheets, and more." />
             ) : (
               <div className="flex flex-col gap-1.5">
@@ -309,7 +314,9 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
 
         {tab === "bookmarks" && (
           <div className="mx-auto max-w-3xl">
-            {bookmarks.length === 0 ? (
+            {bookmarksLoading ? (
+              <TableRowsSkeleton rows={3} />
+            ) : bookmarks.length === 0 ? (
               <EmptyState icon={Star} text="No bookmarks yet. Bookmark answers, documents, or artifacts to find them fast." />
             ) : (
               <div className="flex flex-col gap-1.5">
@@ -336,7 +343,9 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
 
         {tab === "timeline" && (
           <div className="mx-auto max-w-3xl">
-            {timeline.length === 0 ? (
+            {timelineLoading ? (
+              <TableRowsSkeleton rows={6} />
+            ) : timeline.length === 0 ? (
               <EmptyState icon={Clock} text="Nothing has happened yet. Your workspace history will appear here." />
             ) : (
               <div className="relative flex flex-col gap-0 pl-4">

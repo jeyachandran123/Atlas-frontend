@@ -8,6 +8,7 @@ import { ChatInput } from "@/components/chat/chat-input";
 import { QuickActions } from "@/components/chat/quick-actions";
 import { PromptNavigator, type PromptEntry } from "@/components/chat/prompt-navigator";
 import { ScrollToBottomButton } from "@/components/chat/scroll-to-bottom";
+import { ChatMessagesSkeleton } from "@/components/ui/skeleton";
 import { useMessages, useStreamChat, useConversations } from "@/lib/hooks/use-chat";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useAuthStore } from "@/lib/stores/auth-store";
@@ -238,6 +239,10 @@ export function ChatThread() {
         >
           {isEmpty ? (
             <EmptyState onPick={(t) => send(t, selectedRepoId ?? undefined, "auto")} />
+          ) : isLoading && messages.length === 0 && !showOptimistic ? (
+            <div className="mx-auto max-w-[768px] px-6 py-8">
+              <ChatMessagesSkeleton />
+            </div>
           ) : (
             <div className="mx-auto max-w-[768px] px-6 py-8">
               <div className="flex flex-col gap-7">

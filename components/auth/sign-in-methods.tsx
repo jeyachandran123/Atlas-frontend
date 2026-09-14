@@ -5,6 +5,7 @@ import { Check, KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useCurrentUser, useSetPassword } from "@/lib/hooks/use-auth";
 import { ApiError } from "@/types/api";
+import { CardSkeleton } from "@/components/ui/skeleton";
 
 /**
  * How this account can sign in — Google, a password, or both — and the one
@@ -20,7 +21,7 @@ export function SignInMethods() {
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
 
-  if (!user) return null;
+  if (!user) return <CardSkeleton lines={3} />;
 
   const hasPassword = !!user.has_password;
   const google = user.auth_provider === "google";

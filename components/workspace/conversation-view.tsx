@@ -11,6 +11,7 @@ import {
   SquareStack, Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { ChatMessagesSkeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { MessageMarkdown } from "@/components/chat/message-markdown";
@@ -123,7 +124,7 @@ export function ConversationView({
   const scrolledHashRef = useRef<string | null>(null);
 
   // Full restore payload — the single source for initial hydration.
-  const { data: restore } = useQuery({
+  const { data: restore, isLoading: restoring } = useQuery({
     queryKey: ["workspace-restore", workspaceId, conversationId],
     queryFn: () => workspaceApi.restore(workspaceId, conversationId),
   });
@@ -540,7 +541,12 @@ export function ConversationView({
 
       {/* Thread */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
-        {!hasHistory ? (
+        {restoring && !hasHistory ? (
+          // The history is on its way — not the empty "start a conversation" hero.
+          <div className="mx-auto max-w-2xl">
+            <ChatMessagesSkeleton />
+          </div>
+        ) : !hasHistory ? (
           // The hero replaces the thread rather than sitting above it, so it
           // can centre in the space instead of pushing an empty list around.
           <WorkspaceHero

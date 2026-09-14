@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Clock, Download, FileText, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { ListRowsSkeleton } from "@/components/ui/skeleton";
 import { ConversationContextControl } from "@/components/workspace/conversation-context-control";
 import { workspaceApi } from "@/lib/api/workspace";
 import {
@@ -24,8 +25,8 @@ export function WorkspaceContextPanel({ workspace }: { workspace: Workspace }) {
   const pathname = usePathname();
   const wsId = workspace.id;
   const { data: dashboard } = useWorkspaceDashboard(wsId);
-  const { data: documents = [] } = useWorkspaceDocuments(wsId);
-  const { data: artifacts = [] } = useWorkspaceArtifacts(wsId);
+  const { data: documents = [], isLoading: documentsLoading } = useWorkspaceDocuments(wsId);
+  const { data: artifacts = [], isLoading: artifactsLoading } = useWorkspaceArtifacts(wsId);
   const openViewer = useViewerStore((s) => s.open);
   const qc = useQueryClient();
 
@@ -70,7 +71,9 @@ export function WorkspaceContextPanel({ workspace }: { workspace: Workspace }) {
           </Section>
 
           <Section title="Documents">
-            {documents.length === 0 ? (
+            {documentsLoading ? (
+              <ListRowsSkeleton rows={4} />
+            ) : documents.length === 0 ? (
               <p className="text-[11.5px]" style={{ color: "var(--text-muted)" }}>No documents yet.</p>
             ) : (
               <div className="flex flex-col gap-1">
@@ -93,7 +96,9 @@ export function WorkspaceContextPanel({ workspace }: { workspace: Workspace }) {
 
       {/* Recent artifacts */}
       <Section title="Recent artifacts">
-        {artifacts.length === 0 ? (
+        {artifactsLoading ? (
+          <ListRowsSkeleton rows={3} />
+        ) : artifacts.length === 0 ? (
           <p className="text-[11.5px]" style={{ color: "var(--text-muted)" }}>None generated yet.</p>
         ) : (
           <div className="flex flex-col gap-1">

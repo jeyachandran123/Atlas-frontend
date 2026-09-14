@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { WorkspaceSkeleton } from "@/components/ui/skeleton";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
 import { WorkspaceContextPanel } from "@/components/workspace/workspace-context-panel";
 import { OperationsTray } from "@/components/workspace/operations-tray";
@@ -25,13 +25,7 @@ export function WorkspaceShell({
     if (workspace) setActive(workspace.id);
   }, [workspace, setActive]);
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="size-5 animate-spin" style={{ color: "var(--text-muted)" }} />
-      </div>
-    );
-  }
+  if (isLoading) return <WorkspaceSkeleton />;
 
   if (!workspace) {
     return (

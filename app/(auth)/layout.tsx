@@ -49,7 +49,7 @@ function BrandMark() {
           UnityWorks
         </p>
         <p className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>
-          AI Coding Assistant
+          AI Assistant
         </p>
       </div>
     </div>

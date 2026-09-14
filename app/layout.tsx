@@ -19,8 +19,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "UnityWorks — AI Coding Assistant",
-  description: "A self-hosted AI coding assistant grounded in your codebase.",
+  title: "UnityWorks — AI Assistant",
+  description: "A self-hosted AI assistant grounded in your codebase.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

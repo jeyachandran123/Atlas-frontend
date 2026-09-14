@@ -13,6 +13,7 @@ import {
 import { useChatStore } from "@/lib/stores/chat-store";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ConversationListSkeleton } from "@/components/ui/skeleton";
 import type { ConversationOut } from "@/types/api";
 
 /* ── Date grouping (Pinned / Today / Yesterday / Previous 7 days / Older) ── */
@@ -60,7 +61,7 @@ const LOAD_MORE_WITHIN_PX = 120;
  */
 export function ConversationList() {
   const limit = 20;
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteConversations(limit);
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteConversations(limit);
 
   // Pages accumulate: reaching the end adds older chats *under* the ones
   // already shown. Offset pages can overlap when a new chat lands at the top
@@ -141,7 +142,10 @@ export function ConversationList() {
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" ref={scrollRef}>
-        {conversations.length === 0 ? (
+        {isLoading ? (
+          // Not "No conversations yet" — they are on their way.
+          <ConversationListSkeleton />
+        ) : conversations.length === 0 ? (
           <div className="flex flex-col items-center gap-2.5 px-3 py-10">
             <div
               className="flex size-9 items-center justify-center rounded-xl"

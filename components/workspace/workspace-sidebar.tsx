@@ -12,6 +12,7 @@ import {
 import { WorkspaceSwitcher } from "@/components/workspace/workspace-switcher";
 import { WorkspaceSearch } from "@/components/workspace/workspace-search";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ListRowsSkeleton } from "@/components/ui/skeleton";
 import {
   useDeleteConversation, useStartConversation, useWorkspaceConversations,
 } from "@/lib/hooks/use-workspace";
@@ -21,7 +22,7 @@ import type { Workspace, WorkspaceConversation } from "@/types/workspace";
 export function WorkspaceSidebar({ workspace }: { workspace: Workspace }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { data: conversations = [] } = useWorkspaceConversations(workspace.id);
+  const { data: conversations = [], isLoading } = useWorkspaceConversations(workspace.id);
   const startConv = useStartConversation(workspace.id);
   const deleteConv = useDeleteConversation(workspace.id);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -116,7 +117,11 @@ export function WorkspaceSidebar({ workspace }: { workspace: Workspace }) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-3">
-        {conversations.length === 0 && (
+        {isLoading ? (
+          <div className="px-2.5 py-2">
+            <ListRowsSkeleton rows={5} />
+          </div>
+        ) : conversations.length === 0 && (
           <p className="px-2.5 py-2 text-[12px]" style={{ color: "var(--text-muted)" }}>
             No conversations yet. Start one to ask about your documents.
           </p>

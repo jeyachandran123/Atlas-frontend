@@ -6,6 +6,7 @@ import { LogoutDialog } from "@/components/auth/logout-dialog";
 import { SignInMethods } from "@/components/auth/sign-in-methods";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useTheme } from "@/app/providers";
+import { CardSkeleton } from "@/components/ui/skeleton";
 
 const THEMES = [
   { id: "dark", label: "Dark", Icon: Moon },
@@ -47,7 +48,9 @@ export default function SettingsPage() {
       <div className="px-8 py-6">
         <div className="mx-auto max-w-2xl space-y-4">
           {/* Account */}
-          {user && (
+          {!user ? (
+            <CardSkeleton avatar lines={3} />
+          ) : (
             <div className="rounded-xl p-4" style={CARD_STYLE}>
               <div className="flex items-center gap-3.5">
                 <span

@@ -5,10 +5,11 @@ import { Key, Plus, Trash2, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/lib/hooks/use-auth";
 import { formatRelativeTime } from "@/lib/utils/format";
+import { KeyRowsSkeleton } from "@/components/ui/skeleton";
 
 /** API keys — for the CLI and IDE extensions. Account settings live on /settings. */
 export default function ApiKeysPage() {
-  const { data: keys = [] } = useApiKeys();
+  const { data: keys = [], isLoading } = useApiKeys();
   const createKey = useCreateApiKey();
   const revokeKey = useRevokeApiKey();
   const [newKeyName, setNewKeyName] = useState("");
@@ -129,7 +130,9 @@ export default function ApiKeysPage() {
             >
               Active keys ({keys.length})
             </p>
-            {keys.length === 0 ? (
+            {isLoading ? (
+              <KeyRowsSkeleton />
+            ) : keys.length === 0 ? (
               <div
                 className="flex flex-col items-center gap-3 rounded-xl py-12 text-center"
                 style={{
