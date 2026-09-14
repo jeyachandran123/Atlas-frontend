@@ -176,13 +176,16 @@ export interface MessageOut {
   created_at: string;
 }
 
-export type AgentMode = "auto" | "code" | "business";
+/** Each maps onto a chat profile in the backend's app/llm. */
+export type AgentMode = "auto" | "code" | "business" | "reasoning" | "math" | "planning";
 
 export interface ChatRequest {
   message: string;
   conversation_id?: string;
   repo_id?: string;
   agent_mode?: AgentMode;
+  /** Omitted = the profile's default. true/false force thinking for this message. */
+  thinking?: boolean;
 }
 
 // Vision-enabled chat uses FormData (multipart), not JSON
@@ -207,6 +210,8 @@ export interface ChatResponse {
 // SSE stream event union — matches chat/router.py event_generator exactly
 export type ChatStreamEvent =
   | { type: "token"; content: string }
+  /** The model's thinking, streamed apart from the answer. Never saved. */
+  | { type: "reasoning"; content: string }
   | { type: "tool_call"; tool_name: string; rationale?: string }
   | {
       type: "done";

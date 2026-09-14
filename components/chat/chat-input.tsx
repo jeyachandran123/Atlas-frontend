@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, type KeyboardEvent } from "react";
-import { ArrowUp, Square, Plus, ChevronDown, Check, Paperclip, Camera, X, FileText, Image as ImageIcon } from "lucide-react";
+import { ArrowUp, Square, Plus, ChevronDown, Check, Paperclip, Camera, X, FileText, Image as ImageIcon, Brain } from "lucide-react";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { RepoSelector } from "@/components/layout/repo-selector";
 
@@ -25,7 +25,28 @@ const AGENTS = [
     description: "Hotel, ERP, POS & stock management specialist",
     dot: "#fbbf24",
   },
+  {
+    id: "reasoning",
+    label: "Reasoning",
+    description: "Deepest model, step by step — slower, for hard questions",
+    dot: "#f472b6",
+  },
+  {
+    id: "math",
+    label: "Mathematics",
+    description: "Deepest model, checked working — slower",
+    dot: "#38bdf8",
+  },
+  {
+    id: "planning",
+    label: "Agent planning",
+    description: "Breaks a goal into ordered, checkable steps",
+    dot: "#a78bfa",
+  },
 ] as const;
+
+/* Modes whose profile thinks by default (mirrors backend app/llm/profiles.py). */
+const THINKS_BY_DEFAULT = new Set<string>(["code", "reasoning", "math", "planning"]);
 
 type AgentId = (typeof AGENTS)[number]["id"];
 
@@ -48,6 +69,8 @@ export function ChatInput({
   const [value, setValue] = useState("");
   const agent = useChatStore((s) => s.agentMode);
   const setAgent = useChatStore((s) => s.setAgentMode);
+  const thinking = useChatStore((s) => s.thinking);
+  const setThinking = useChatStore((s) => s.setThinking);
   const [agentOpen, setAgentOpen] = useState(false);
   const [switchedTo, setSwitchedTo] = useState<string | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -355,6 +378,35 @@ export function ChatInput({
               </div>
             )}
           </div>
+
+          {/* Thinking: Auto (the mode's default) → On → Off → Auto */}
+          {(() => {
+            const effective = thinking ?? THINKS_BY_DEFAULT.has(agent);
+            const label = thinking === null ? `Think: auto` : thinking ? "Think: on" : "Think: off";
+            const next = thinking === null ? true : thinking ? false : null;
+            return (
+              <button
+                onClick={() => setThinking(next)}
+                disabled={isStreaming}
+                title={
+                  thinking === null
+                    ? `Following ${selectedAgent.label}'s default (${effective ? "thinks first" : "answers directly"}). Click to force on.`
+                    : thinking
+                    ? "The model reasons before answering — slower, better on hard problems. Click to force off."
+                    : "The model answers directly — fastest. Click to return to the mode's default."
+                }
+                className="menu-trigger flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium disabled:opacity-50"
+                style={{
+                  color: effective ? "var(--accent-bright)" : "var(--text-tertiary)",
+                  background: thinking === true ? "var(--accent-subtle)" : undefined,
+                }}
+                aria-label={label}
+              >
+                <Brain className="size-3.5" />
+                {label}
+              </button>
+            );
+          })()}
 
           {/* Repo selector — code mode only, after agent selector */}
           {agent === "code" && (

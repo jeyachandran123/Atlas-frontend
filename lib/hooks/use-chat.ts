@@ -1,19 +1,42 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
 import { chatApi, streamChatMessage } from "@/lib/api/chat";
 import { useChatStore } from "@/lib/stores/chat-store";
-import type { ChatRequest, MessageOut } from "@/types/api";
+import type { ChatRequest, MessageOut, AgentMode } from "@/types/api";
 
 export const chatKeys = {
-  conversations: (limit?: number, offset?: number) => 
+  conversations: (limit?: number, offset?: number) =>
     ["conversations", { limit, offset }] as const,
+  conversationsInfinite: (limit: number) => ["conversations", "infinite", { limit }] as const,
   messages: (conversationId: string) => ["conversations", conversationId, "messages"] as const,
 };
 
+/** One page of conversations — for callers that only need the most recent. */
 export function useConversations(limit = 15, offset = 0) {
   return useQuery({
     queryKey: chatKeys.conversations(limit, offset),
     queryFn: () => chatApi.listConversations(limit, offset),
+  });
+}
+
+/**
+ * Every conversation, loaded a page at a time and kept.
+ *
+ * The sidebar used to pass a growing offset to ``useConversations``, which is a
+ * different query per offset — so scrolling to the end swapped the whole list
+ * for the next page. Today and the previous week vanished and there was nothing
+ * above to scroll back to. Here pages accumulate, and an invalidation (a new
+ * chat, a rename, a pin) refetches every page already loaded, in order.
+ */
+export function useInfiniteConversations(limit = 20) {
+  return useInfiniteQuery({
+    queryKey: chatKeys.conversationsInfinite(limit),
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => chatApi.listConversations(limit, pageParam),
+    getNextPageParam: (lastPage, _pages, lastPageParam) => {
+      const next = lastPageParam + limit;
+      return next < lastPage.total ? next : undefined;
+    },
   });
 }
 
@@ -167,11 +190,16 @@ export function useStreamChat() {
         ]);
       }
 
+      // Read at send time, not captured at render: the toggle may have
+      // changed since this callback was created.
+      const thinking = useChatStore.getState().thinking;
+
       const payload: ChatRequest = {
         message,
         conversation_id: conversationId,
         repo_id: repoId,
-        agent_mode: agentMode as "auto" | "code" | "business",
+        agent_mode: agentMode as AgentMode,
+        ...(thinking === null ? {} : { thinking }),
       };
 
       const controller = streamChatMessage(

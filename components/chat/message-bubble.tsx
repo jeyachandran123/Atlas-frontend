@@ -55,18 +55,15 @@ export function MessageBubble({
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Resolve images: prefer API response (persisted), fall back to Zustand (optimistic)
-  const zustandImages = useChatStore((s) => {
-    const direct = s.messageImages[message.id];
-    if (direct) return direct;
-    if (message.role === "user" && !message.id.startsWith("optimistic-")) {
-      for (const [key, imgs] of Object.entries(s.messageImages)) {
-        if (!key.startsWith("optimistic-") || !imgs.length) continue;
-        return imgs;
-      }
-    }
-    return undefined;
-  });
+  // Optimistic attachments live in the store under the optimistic message's own
+  // id, and only there. A persisted message takes its attachments from the API.
+  //
+  // This used to fall back to "the first optimistic entry in the store" for
+  // any persisted user message without one of its own — which handed a single
+  // attachment to every message in the conversation, including ones sent
+  // before it. The API returns each message's own attachments now, so there is
+  // nothing to guess.
+  const zustandImages = useChatStore((s) => s.messageImages[message.id]);
 
   // For API images, we need authenticated fetch since <img> can't send Bearer tokens
   const [resolvedApiImages, setResolvedApiImages] = useState<Array<{ id: string; url: string; name: string }>>([]);
