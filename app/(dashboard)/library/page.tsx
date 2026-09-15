@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  Check, ChevronLeft, ChevronRight, Download, File as FileGlyph, FileSpreadsheet, FileText,
+  Check, Download, File as FileGlyph, FileSpreadsheet, FileText,
   FileType2, ImageIcon, Library, Loader2, MessageSquare, Search, Sparkles, X,
 } from "lucide-react";
 import { useLibrary } from "@/lib/hooks/use-library";
 import { libraryApi } from "@/lib/api/library";
 import { useViewerStore } from "@/lib/stores/viewer-store";
 import { LibraryGridSkeleton } from "@/components/ui/skeleton";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 import type { LibraryItem, LibraryKind } from "@/types/api";
 
 type Tab = "all" | LibraryKind;
@@ -270,7 +271,22 @@ export default function LibraryPage() {
       </div>
 
       {viewer !== null && images[viewer] && (
-        <Lightbox items={images} index={viewer} onIndex={setViewer} onClose={() => setViewer(null)} />
+        <ImageLightbox
+          images={images.map((item) => ({
+            key: item.id,
+            name: item.name,
+            src: item.preview_url,
+            resolve: async () => (await libraryApi.downloadById("image", item.id, item.filename)).url,
+            meta: [timeAgo(item.created_at), item.conversation_title].filter(Boolean).join(" · "),
+            link: item.conversation_id
+              ? { label: "Open chat", href: `/chat/${item.conversation_id}`, icon: MessageSquare }
+              : undefined,
+            download: () => saveItem(item),
+          }))}
+          index={viewer}
+          onIndex={setViewer}
+          onClose={() => setViewer(null)}
+        />
       )}
     </div>
   );
@@ -436,97 +452,6 @@ function TileActions({ item }: { item: LibraryItem }) {
           : state === "error" ? <X className="size-3.5" />
           : <Download className="size-3.5" />}
       </button>
-    </div>
-  );
-}
-
-// ── Viewer ────────────────────────────────────────────────────────────────
-
-function Lightbox({
-  items, index, onIndex, onClose,
-}: {
-  items: LibraryItem[];
-  index: number;
-  onIndex: (i: number) => void;
-  onClose: () => void;
-}) {
-  const item = items[index]!;
-  const src = useImageSrc(item);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-      else if (e.key === "ArrowRight" && index < items.length - 1) onIndex(index + 1);
-      else if (e.key === "ArrowLeft" && index > 0) onIndex(index - 1);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [index, items.length, onClose, onIndex]);
-
-  const btn = "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-white/15";
-  const btnStyle: React.CSSProperties = { background: "rgba(255,255,255,0.08)" };
-
-  return (
-    <div
-      className="fixed inset-0 z-[60] flex flex-col animate-fade-in"
-      style={{ background: "rgba(5,5,10,0.92)", backdropFilter: "blur(6px)" }}
-      onClick={onClose}
-    >
-      <div className="flex items-center justify-between gap-4 px-5 py-3" onClick={(e) => e.stopPropagation()}>
-        <div className="min-w-0">
-          <p className="truncate text-[13px] font-medium text-white">{item.name}</p>
-          <p className="text-[11px] text-white/60">
-            {index + 1} of {items.length} · {timeAgo(item.created_at)}
-            {item.conversation_title ? ` · ${item.conversation_title}` : ""}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {item.conversation_id && (
-            <Link href={`/chat/${item.conversation_id}`} className={btn} style={btnStyle}>
-              <MessageSquare className="size-3.5" /> Open chat
-            </Link>
-          )}
-          <button onClick={() => void saveItem(item)} className={btn} style={btnStyle}>
-            <Download className="size-3.5" /> Download
-          </button>
-          <button onClick={onClose} aria-label="Close" className={btn} style={btnStyle}>
-            <X className="size-3.5" />
-          </button>
-        </div>
-      </div>
-      <div className="relative flex min-h-0 flex-1 items-center justify-center px-16 pb-8">
-        {index > 0 && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onIndex(index - 1); }}
-            aria-label="Previous image"
-            className="absolute left-4 flex size-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/15"
-            style={btnStyle}
-          >
-            <ChevronLeft className="size-5" />
-          </button>
-        )}
-        {src ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={src}
-            alt={item.name}
-            className="max-h-full max-w-full rounded-xl object-contain shadow-2xl animate-scale-up"
-            onClick={(e) => e.stopPropagation()}
-          />
-        ) : (
-          <Loader2 className="size-6 animate-spin text-white/70" />
-        )}
-        {index < items.length - 1 && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onIndex(index + 1); }}
-            aria-label="Next image"
-            className="absolute right-4 flex size-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/15"
-            style={btnStyle}
-          >
-            <ChevronRight className="size-5" />
-          </button>
-        )}
-      </div>
     </div>
   );
 }

@@ -32,6 +32,7 @@ export function ChatThread() {
   const optimisticUserMessage = useChatStore((s) => s.optimisticUserMessage);
   const resetStreamingContent = useChatStore((s) => s.resetStreamingContent);
   const clearOptimisticMessage = useChatStore((s) => s.clearOptimisticMessage);
+  const streamEndedAt = useChatStore((s) => s.streamEndedAt);
 
   // Only show streaming state if it belongs to the currently viewed conversation
   const isActiveStream = isStreaming && streamingConversationId === activeConversationId;
@@ -41,8 +42,20 @@ export function ChatThread() {
   const showStreamError = streamError && streamingConversationId === activeConversationId;
   const showOptimistic = optimisticUserMessage && streamingConversationId === activeConversationId;
 
-  const { data: messages = [], isLoading } = useMessages(activeConversationId);
+  const { data: messages = [], isLoading, dataUpdatedAt } = useMessages(activeConversationId);
   const { send, editAndResend, retry, deleteMessage, stop } = useStreamChat();
+
+  // The streamed reply stays on screen after the stream ends, until its saved
+  // copy is in the list — the refetch takes a moment, and clearing it sooner
+  // left the answer blank in between. The hand-over ends when the reply is the
+  // last message, or when fresh data from after the stream arrives (a stopped
+  // or failed turn saves no reply). Both are decided in the same render the
+  // saved copy appears in, so the two never show together.
+  const lastMessage = messages[messages.length - 1];
+  const handingOver =
+    !isActiveStream && !streamError && streamEndedAt !== null
+    && streamingConversationId === activeConversationId
+    && lastMessage?.role !== "assistant" && dataUpdatedAt <= streamEndedAt;
 
   // Conversation title for the header (best-effort from the cached list)
   const { data: convData } = useConversations();
@@ -59,8 +72,8 @@ export function ChatThread() {
     store.setComposerDraft({ text: start.text, files: start.files });
   }
 
-  function handleEdit(messageId: string, newContent: string) {
-    editAndResend(messageId, newContent, selectedRepoId ?? undefined);
+  function handleEdit(messageId: string, newContent: string, keep?: string[]) {
+    editAndResend(messageId, newContent, selectedRepoId ?? undefined, keep);
   }
 
   // Last user message for error-banner retry
@@ -187,12 +200,14 @@ export function ChatThread() {
   useEffect(() => { updateActivePrompt(); }, [updateActivePrompt]);
   useEffect(() => () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); }, []);
 
+  // Once the saved reply has taken its place, the streamed copy is done with.
+  // A failed turn keeps its prompt for the error banner's retry.
   useEffect(() => {
-    if (!isActiveStream && activeStreamContent && messages.length > 0) {
-      const t = setTimeout(() => { resetStreamingContent(); clearOptimisticMessage(); }, 100);
-      return () => clearTimeout(t);
+    if (!isActiveStream && streamEndedAt !== null && !handingOver && !streamError) {
+      resetStreamingContent();
+      clearOptimisticMessage();
     }
-  }, [isActiveStream, activeStreamContent, messages.length, resetStreamingContent, clearOptimisticMessage]);
+  }, [isActiveStream, streamEndedAt, handingOver, streamError, resetStreamingContent, clearOptimisticMessage]);
 
   const isEmpty = messages.length === 0 && !isActiveStream && !isLoading && !showOptimistic;
 
@@ -269,7 +284,7 @@ export function ChatThread() {
                         ? (id, content) => handleRetry(id, content)
                         : undefined}
                       onEdit={m.role === "user" && !isActiveStream
-                        ? (id, newContent) => handleEdit(id, newContent)
+                        ? (id, newContent, keep) => handleEdit(id, newContent, keep)
                         : undefined}
                       onDelete={m.role === "user" && !isActiveStream ? (id) => deleteMessage(id) : undefined}
                       isLastUserWithoutReply={m.role === "user" && i === lastUnansweredUserIdx && !isActiveStream}
@@ -287,7 +302,7 @@ export function ChatThread() {
                     <MessageBubble key={optimisticUserMessage!.id} message={optimisticUserMessage!} />
                   )}
 
-                {(isActiveStream || activeStreamContent) && (
+                {(isActiveStream || handingOver) && (
                   <StreamingMessageBubble content={activeStreamContent} activeToolCall={activeToolCall} reasoning={isActiveStream ? streamingReasoning : ""} fileStage={isActiveStream ? streamingFileStage : null} file={streamingConversationId === activeConversationId ? streamingFile : null} />
                 )}
 

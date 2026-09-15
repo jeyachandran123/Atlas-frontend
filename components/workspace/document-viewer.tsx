@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  Download, FileSpreadsheet, FileText, Loader2, Maximize2, Minimize2, Minus, Plus, X,
+  Download, FileSpreadsheet, FileText, ImageIcon, Loader2, Maximize2, Minimize2, Minus, Plus, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MessageMarkdown } from "@/components/chat/message-markdown";
@@ -74,9 +74,11 @@ function ViewerModal({ resource, onClose }: { resource: ViewerResource; onClose:
       ? viewerApi.preview(resource).then((p) => {
           if (!cancelled) setPreview(p);
         })
-      : viewerApi.content(resource).then(({ blobUrl, mime, text }) => {
-          if (cancelled) { URL.revokeObjectURL(blobUrl); return; }
-          urlRef.current = blobUrl;
+      : viewerApi.content(resource).then(({ blobUrl, mime, text, owned }) => {
+          if (cancelled) { if (owned) URL.revokeObjectURL(blobUrl); return; }
+          // Only a URL made for this viewer is released with it; a signed link
+          // or a chat's own preview is not ours to revoke.
+          if (owned) urlRef.current = blobUrl;
           setBlobUrl(blobUrl);
           setMime(mime);
           setText(text);
@@ -112,7 +114,7 @@ function ViewerModal({ resource, onClose }: { resource: ViewerResource; onClose:
   }, [resource]);
 
   const canZoom = kind === "image";
-  const HeaderIcon = kind === "sheet" ? FileSpreadsheet : FileText;
+  const HeaderIcon = kind === "sheet" ? FileSpreadsheet : kind === "image" ? ImageIcon : FileText;
   const unavailable = !loading && !error && (
     kind === "office" || kind === "unknown"
     || (usesPreview && (preview?.type === "unsupported" || preview?.type === "too_large"))
@@ -198,10 +200,16 @@ function ViewerModal({ resource, onClose }: { resource: ViewerResource; onClose:
                 <iframe title={resource.filename} src={blobUrl} className="h-full w-full" style={{ border: "none" }} />
               )}
               {kind === "image" && (
-                <div className="flex min-h-full items-center justify-center p-6">
+                // At 100% the whole picture fits the window; zoom enlarges from there.
+                <div className="flex h-full items-center justify-center p-6">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={blobUrl} alt={resource.filename}
-                    style={{ transform: `scale(${zoom})`, transformOrigin: "center", maxWidth: "100%", transition: "transform 0.15s" }} />
+                  <img src={blobUrl} alt={resource.filename} decoding="async"
+                    className="rounded-lg"
+                    style={{
+                      transform: `scale(${zoom})`, transformOrigin: "center", transition: "transform 0.15s",
+                      maxWidth: "100%", maxHeight: "100%", objectFit: "contain",
+                      boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
+                    }} />
                 </div>
               )}
               {kind === "markdown" && text != null && (

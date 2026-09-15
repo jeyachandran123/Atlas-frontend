@@ -34,17 +34,27 @@ async function authedFetch(path: string): Promise<Response> {
 
 /** Everything the in-app viewer loads, whichever part of the app the file lives in. */
 export const viewerApi = {
-  /** The file itself, as a blob URL — for PDFs, images and text. */
-  content: async (r: ViewerResource): Promise<{ blobUrl: string; mime: string; text: string | null }> => {
+  /**
+   * The file itself — for PDFs, images and text. `owned` says the URL was made
+   * here, as a blob, and is the viewer's to release when it closes.
+   */
+  content: async (r: ViewerResource): Promise<{ blobUrl: string; mime: string; text: string | null; owned: boolean }> => {
     const kind = libraryKind(r);
     if (!kind) {
-      return workspaceApi.fetchViewable(r.kind as "document" | "artifact", r.id, r.workspaceId ?? "");
+      const viewable = await workspaceApi.fetchViewable(r.kind as "document" | "artifact", r.id, r.workspaceId ?? "");
+      return { ...viewable, owned: true };
+    }
+    if (kind === "image") {
+      // Straight from storage when it can sign a link: quicker, and not held to
+      // the API proxy's size limit. An <img> ignores the link's download header.
+      const { url, revoke } = await libraryApi.downloadById("image", r.id, r.filename);
+      return { blobUrl: url, mime: "image/*", text: null, owned: revoke };
     }
     const res = await authedFetch(`/library/${kind}/${encodeURIComponent(r.id)}/file`);
     const blob = await res.blob();
     const mime = res.headers.get("content-type")?.split(";")[0] || blob.type || "application/octet-stream";
     const textLike = /^(text\/|application\/(json|xml)|.*markdown|.*html)/i.test(mime);
-    return { blobUrl: URL.createObjectURL(blob), mime, text: textLike ? await blob.text() : null };
+    return { blobUrl: URL.createObjectURL(blob), mime, text: textLike ? await blob.text() : null, owned: true };
   },
 
   /** A spreadsheet as a grid, a Word file as paragraphs — read on the server. */

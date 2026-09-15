@@ -10,12 +10,16 @@ function authHeaders(): HeadersInit {
 }
 
 /** The bytes through the API — for storage that cannot hand out signed links. */
-async function fileBlobUrl(item: Pick<LibraryItem, "kind" | "id">): Promise<string> {
-  const res = await fetch(`${API_BASE}/library/${item.kind}/${encodeURIComponent(item.id)}/file`, {
+async function fileBlob(kind: LibraryKind, id: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/library/${kind}/${encodeURIComponent(id)}/file`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(`Could not load the file (${res.status})`);
-  return URL.createObjectURL(await res.blob());
+  return res.blob();
+}
+
+async function fileBlobUrl(item: Pick<LibraryItem, "kind" | "id">): Promise<string> {
+  return URL.createObjectURL(await fileBlob(item.kind, item.id));
 }
 
 export const libraryApi = {
@@ -50,4 +54,7 @@ export const libraryApi = {
 
   /** An image preview when there is no signed link to use. */
   imageBlobUrl: (imageId: string) => fileBlobUrl({ kind: "image", id: imageId }),
+
+  /** A file's bytes — to send it again with an edited or retried chat message. */
+  fileBlob,
 };

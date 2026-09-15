@@ -47,6 +47,12 @@ interface ChatState {
   streamingFile: ChatFilePayload | null;
   /** Text (and files) a quick-start card puts in the prompt box — taken once by ChatInput. */
   composerDraft: ComposerDraft | null;
+  /**
+   * When the last stream ended (done, error or stop). Its reply stays on screen
+   * until the saved copy is back from the server, so there is never a moment
+   * showing neither; cleared once that hand-over is complete.
+   */
+  streamEndedAt: number | null;
   /** Maps message ID → image previews for display */
   messageImages: Record<string, MessageImage[]>;
   /** All images uploaded across all conversations (gallery) */
@@ -92,6 +98,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamingFileStage: null,
   streamingFile: null,
   composerDraft: null,
+  streamEndedAt: null,
   messageImages: {},
   galleryImages: [],
 
@@ -116,6 +123,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       streamingReasoning: "",
       streamingFileStage: null,
       streamingFile: null,
+      streamEndedAt: null,
       streamError: null,
       activeToolCall: null,
       abortController: controller,
@@ -146,23 +154,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
         });
         break;
       case "error":
-        set({ streamError: event.message, isStreaming: false });
+        set((s) => ({ streamError: event.message, isStreaming: false, streamEndedAt: s.streamEndedAt ?? Date.now() }));
         break;
       case "done":
-        set({ isStreaming: false, activeToolCall: null });
+        set((s) => ({ isStreaming: false, activeToolCall: null, streamEndedAt: s.streamEndedAt ?? Date.now() }));
         break;
     }
   },
 
-  endStream: () => set({ isStreaming: false, activeToolCall: null, abortController: null, streamingFileStage: null }),
+  // The first end wins: "done" arrives before the stream closes, and the
+  // hand-over waits for data fetched after that moment.
+  endStream: () =>
+    set((s) => ({
+      isStreaming: false, activeToolCall: null, abortController: null, streamingFileStage: null,
+      streamEndedAt: s.streamEndedAt ?? Date.now(),
+    })),
 
   stopStream: () => {
     get().abortController?.abort();
-    set({ isStreaming: false, activeToolCall: null, abortController: null });
+    set((s) => ({
+      isStreaming: false, activeToolCall: null, abortController: null,
+      streamEndedAt: s.streamEndedAt ?? Date.now(),
+    }));
   },
 
   resetStreamingContent: () =>
-    set({ streamingContent: "", streamingReasoning: "", streamingFileStage: null, streamingFile: null }),
+    set({ streamingContent: "", streamingReasoning: "", streamingFileStage: null, streamingFile: null, streamEndedAt: null }),
   
   clearOptimisticMessage: () => set({ optimisticUserMessage: null }),
 

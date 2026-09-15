@@ -1,6 +1,8 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
+import { toast } from "sonner";
 import { chatApi, streamChatMessage } from "@/lib/api/chat";
+import { libraryApi } from "@/lib/api/library";
 import { useChatStore } from "@/lib/stores/chat-store";
 import type { ChatRequest, MessageOut, AgentMode } from "@/types/api";
 
@@ -322,27 +324,79 @@ export function useStreamChat() {
   );
 
   /**
-   * Edit: truncate the conversation from the given message onwards,
-   * then re-send with the new text. The old message disappears.
+   * A message's attachments, fetched back as files so an edit or a retry can
+   * send them again — deleting the old message deletes its files, so this runs
+   * first. `keep` narrows it to the ones left on the message while editing.
+   * null means a file could not be fetched, and nothing should change.
+   */
+  const attachmentsOf = useCallback(
+    async (conversationId: string, messageId: string, keep?: string[]): Promise<File[] | null> => {
+      const message = queryClient
+        .getQueryData<MessageOut[]>(chatKeys.messages(conversationId))
+        ?.find((m) => m.id === messageId);
+      const previews = (useChatStore.getState().messageImages[messageId] ?? [])
+        .filter((p) => !p.isDocument && p.url);
+      const wanted = (id: string) => !keep || keep.includes(id);
+      const asFile = async (bytes: Promise<Blob>, name: string, type: string) => {
+        const blob = await bytes;
+        return new File([blob], name, { type: type || blob.type });
+      };
+      // This session's own copy when it still has one; the saved file otherwise.
+      const localBytes = (url: string) => fetch(url).then((r) => r.blob());
+
+      const jobs: Promise<File>[] = [];
+      const savedImages = message?.images ?? [];
+      if (savedImages.length > 0) {
+        for (const img of savedImages) {
+          if (!wanted(img.id)) continue;
+          const copy = previews.find((p) => p.name === img.filename);
+          jobs.push(asFile(copy ? localBytes(copy.url) : libraryApi.fileBlob("image", img.id), img.filename, img.mime_type));
+        }
+      } else {
+        // Stopped before the server answered: only this session's previews exist.
+        for (const p of previews) {
+          if (wanted(p.id)) jobs.push(asFile(localBytes(p.url), p.name, ""));
+        }
+      }
+      for (const doc of message?.documents ?? []) {
+        if (wanted(doc.id)) jobs.push(asFile(libraryApi.fileBlob("document", doc.id), doc.filename, doc.mime_type));
+      }
+      try {
+        return await Promise.all(jobs);
+      } catch {
+        toast.error("Couldn't re-attach this message's files, so it was left as it was.");
+        return null;
+      }
+    },
+    [queryClient],
+  );
+
+  /**
+   * Edit: truncate the conversation from the given message onwards, then send
+   * the new text — with the message's attachments, bar any removed while editing.
    */
   const editAndResend = useCallback(
-    async (messageId: string, newText: string, repoId?: string) => {
+    async (messageId: string, newText: string, repoId?: string, keep?: string[]) => {
       const conversationId = activeConversationId;
       if (!conversationId) return;
+      const files = await attachmentsOf(conversationId, messageId, keep);
+      if (files === null) return;
       await truncateFrom(conversationId, messageId);
-      send(newText, repoId, "auto");
+      send(newText, repoId, "auto", files.length > 0 ? files : undefined);
     },
-    [activeConversationId, send, truncateFrom],
+    [activeConversationId, attachmentsOf, send, truncateFrom],
   );
 
   const retry = useCallback(
     async (messageId: string, content: string, repoId?: string) => {
       const conversationId = activeConversationId;
       if (!conversationId) return;
+      const files = await attachmentsOf(conversationId, messageId);
+      if (files === null) return;
       await truncateFrom(conversationId, messageId, content);
-      send(content, repoId, "auto");
+      send(content, repoId, "auto", files.length > 0 ? files : undefined);
     },
-    [activeConversationId, send, truncateFrom],
+    [activeConversationId, attachmentsOf, send, truncateFrom],
   );
 
   const stop = useCallback(() => {
