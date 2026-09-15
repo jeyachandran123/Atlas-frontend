@@ -2,8 +2,11 @@
 
 import { useRef, useState, useEffect, type KeyboardEvent } from "react";
 import { ArrowUp, Square, Plus, ChevronDown, Check, Paperclip, Camera, X, FileText, Image as ImageIcon, Brain } from "lucide-react";
+import { toast } from "sonner";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useVoiceInput } from "@/lib/hooks/use-voice-input";
 import { RepoSelector } from "@/components/layout/repo-selector";
+import { ListeningStrip, VOICE_MESSAGES, VoiceButton } from "@/components/chat/voice-input";
 
 /* ── Agent definitions ─────────────────────────────────────────── */
 const AGENTS = [
@@ -95,6 +98,58 @@ export function ChatInput({
   const agentRef = useRef<HTMLDivElement>(null);
   const attachRef = useRef<HTMLDivElement>(null);
 
+  /* ── Voice dictation ─────────────────────────────────────────── */
+  // What was in the box when dictation began; the words heard are added after it.
+  const voiceBaseRef = useRef("");
+  // False once the user types or sends: words the browser still delivers after
+  // that must not overwrite what they did.
+  const dictatingRef = useRef(false);
+  const voice = useVoiceInput({
+    onTranscript: (heard) => {
+      if (!dictatingRef.current) return;
+      const base = voiceBaseRef.current;
+      setValue(heard ? (base ? `${base} ${heard}` : heard) : base);
+      requestAnimationFrame(resizeTextarea);
+    },
+    onError: (kind) => {
+      if (kind === "no-speech") toast(VOICE_MESSAGES[kind]);
+      else toast.error(VOICE_MESSAGES[kind]);
+    },
+  });
+  const { listening, stop: stopVoice } = voice;
+
+  function toggleVoice() {
+    if (listening) { stopVoice(); return; }
+    if (!voice.supported) { toast.error(VOICE_MESSAGES.unsupported); return; }
+    voiceBaseRef.current = value.trimEnd();
+    dictatingRef.current = true;
+    voice.start();
+    textareaRef.current?.focus();
+  }
+
+  /** Typing or sending takes over from dictation: keep what is there, stop listening. */
+  function endDictation() {
+    if (!listening) return;
+    dictatingRef.current = false;
+    stopVoice();
+  }
+
+  // Esc stops dictation wherever focus is.
+  useEffect(() => {
+    if (!listening) return;
+    const onEsc = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape") stopVoice(); };
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [listening, stopVoice]);
+
+  // A reply starting to stream ends dictation.
+  useEffect(() => {
+    if (isStreaming && listening) {
+      dictatingRef.current = false;
+      stopVoice();
+    }
+  }, [isStreaming, listening, stopVoice]);
+
   const hasContent = value.trim().length > 0 || attachedFiles.length > 0;
   const hasBlank = HAS_BLANK.test(value);
   const selectedAgent = AGENTS.find((a) => a.id === agent)!;
@@ -176,6 +231,7 @@ export function ChatInput({
   function submit() {
     const t = value.trim();
     if ((!t && attachedFiles.length === 0) || isStreaming) return;
+    endDictation();
     onSend(t, attachedFiles.map((f) => f.file), agent);
     setValue("");
     setAttachedFiles([]);
@@ -192,10 +248,20 @@ export function ChatInput({
   }
 
   function onTextInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    endDictation();
     setValue(e.target.value);
     const el = e.target;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }
+
+  /** Grow the box to its text, keeping the newest dictated words in view. */
+  function resizeTextarea() {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    el.scrollTop = el.scrollHeight;
   }
 
   function handleFiles(files: FileList | File[] | null) {
@@ -233,12 +299,16 @@ export function ChatInput({
         background: "var(--surface-1)",
         border: isStreaming
           ? "1px solid var(--accent-border)"
+          : listening
+          ? "1px solid rgba(239,68,68,0.55)"
           : hasContent
           ? "1px solid var(--border-strong)"
           : "1px solid var(--border-default)",
         borderRadius: "18px",
         boxShadow: isStreaming
           ? `0 0 0 3px var(--accent-subtle), var(--shadow-lg)`
+          : listening
+          ? "0 0 0 3px rgba(239,68,68,0.14), var(--shadow-lg)"
           : hasContent
           ? "var(--shadow-lg)"
           : "var(--shadow-md)",
@@ -301,6 +371,11 @@ export function ChatInput({
         </div>
       )}
 
+      {/* Dictation in progress */}
+      {listening && voice.startedAt !== null && (
+        <ListeningStrip levelRef={voice.levelRef} startedAt={voice.startedAt} />
+      )}
+
       {/* Textarea */}
       <textarea
         ref={textareaRef}
@@ -309,6 +384,7 @@ export function ChatInput({
         onKeyDown={onKeyDown}
         disabled={disabled}
         placeholder={
+          listening ? "Listening… start speaking" :
           agent === "business" ? "Ask about hotel management, ERP, POS, inventory…" :
           agent === "code"     ? "Ask anything about your codebase…" :
           "Ask me anything — coding, history, business, pop culture…"
@@ -481,23 +557,31 @@ export function ChatInput({
               <Square className="size-3.5 fill-current" />
             </button>
           ) : (
-            <button
-              onClick={submit}
-              disabled={!hasContent || disabled}
-              aria-label="Send message"
-              className="send-btn flex size-8 items-center justify-center rounded-xl disabled:cursor-not-allowed disabled:opacity-25"
-              style={hasContent && !disabled ? {
-                background: "var(--accent-gradient)",
-                boxShadow: "var(--shadow-accent-sm), inset 0 1px 0 rgba(255,255,255,0.15)",
-                color: "#fff",
-              } : {
-                background: "var(--surface-3)",
-                border: "1px solid var(--border-default)",
-                color: "var(--text-muted)",
-              }}
-            >
-              <ArrowUp className="size-4" />
-            </button>
+            <>
+              <VoiceButton
+                supported={voice.supported}
+                listening={listening}
+                disabled={disabled}
+                onToggle={toggleVoice}
+              />
+              <button
+                onClick={submit}
+                disabled={!hasContent || disabled}
+                aria-label="Send message"
+                className="send-btn flex size-8 items-center justify-center rounded-xl disabled:cursor-not-allowed disabled:opacity-25"
+                style={hasContent && !disabled ? {
+                  background: "var(--accent-gradient)",
+                  boxShadow: "var(--shadow-accent-sm), inset 0 1px 0 rgba(255,255,255,0.15)",
+                  color: "#fff",
+                } : {
+                  background: "var(--surface-3)",
+                  border: "1px solid var(--border-default)",
+                  color: "var(--text-muted)",
+                }}
+              >
+                <ArrowUp className="size-4" />
+              </button>
+            </>
           )}
         </div>
       </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
+import { toast } from "sonner";
 import {
   ChevronDown,
   Loader2,
@@ -10,6 +11,8 @@ import {
   Sparkles,
   Square,
 } from "lucide-react";
+import { useVoiceInput } from "@/lib/hooks/use-voice-input";
+import { ListeningStrip, VOICE_MESSAGES, VoiceButton } from "@/components/chat/voice-input";
 
 /**
  * The workspace composer, wearing the chat module's clothes.
@@ -55,14 +58,71 @@ export function WorkspaceComposer({
   const fileInput = useRef<HTMLInputElement>(null);
   const hasContent = value.trim().length > 0;
 
+  /* ── Voice dictation — the same microphone as the chat module ─── */
+  // What was in the box when dictation began; the words heard are added after it.
+  const voiceBaseRef = useRef("");
+  // False once the user types or sends: late words must not overwrite that.
+  const dictatingRef = useRef(false);
+  const voice = useVoiceInput({
+    onTranscript: (heard) => {
+      if (!dictatingRef.current) return;
+      const base = voiceBaseRef.current;
+      onChange(heard ? (base ? `${base} ${heard}` : heard) : base);
+    },
+    onError: (kind) => {
+      if (kind === "no-speech") toast(VOICE_MESSAGES[kind]);
+      else toast.error(VOICE_MESSAGES[kind]);
+    },
+  });
+  const { listening, stop: stopVoice } = voice;
+
+  function toggleVoice() {
+    if (listening) { stopVoice(); return; }
+    if (!voice.supported) { toast.error(VOICE_MESSAGES.unsupported); return; }
+    voiceBaseRef.current = value.trimEnd();
+    dictatingRef.current = true;
+    voice.start();
+    textareaRef.current?.focus();
+  }
+
+  /** Typing or sending takes over from dictation: keep what is there, stop listening. */
+  function endDictation() {
+    if (!listening) return;
+    dictatingRef.current = false;
+    stopVoice();
+  }
+
+  function send() {
+    endDictation();
+    onSend();
+  }
+
+  // Esc stops dictation wherever focus is.
+  useEffect(() => {
+    if (!listening) return;
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") stopVoice(); };
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [listening, stopVoice]);
+
+  // A turn starting ends dictation.
+  useEffect(() => {
+    if (busy && listening) {
+      dictatingRef.current = false;
+      stopVoice();
+    }
+  }, [busy, listening, stopVoice]);
+
   // Grow with the text, to a ceiling. A composer that scrolls at three lines
-  // makes people write in a box the size of a search field.
+  // makes people write in a box the size of a search field. While dictating,
+  // the newest words stay in view.
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-  }, [value]);
+    if (listening) el.scrollTop = el.scrollHeight;
+  }, [value, listening]);
 
   useEffect(() => {
     if (autoFocus) textareaRef.current?.focus();
@@ -80,6 +140,8 @@ export function WorkspaceComposer({
         background: "var(--surface-1)",
         border: busy
           ? "1px solid var(--accent-border)"
+          : listening
+          ? "1px solid rgba(239,68,68,0.55)"
           : genMode
           ? "1px solid var(--accent-border)"
           : hasContent
@@ -88,6 +150,8 @@ export function WorkspaceComposer({
         borderRadius: "18px",
         boxShadow: busy
           ? "0 0 0 3px var(--accent-subtle), var(--shadow-lg)"
+          : listening
+          ? "0 0 0 3px rgba(239,68,68,0.14), var(--shadow-lg)"
           : hasContent
           ? "var(--shadow-lg)"
           : "var(--shadow-md)",
@@ -114,21 +178,28 @@ export function WorkspaceComposer({
         onChange={(e) => onAttach(e.target.files)}
       />
 
+      {/* Dictation in progress */}
+      {listening && voice.startedAt !== null && (
+        <ListeningStrip levelRef={voice.levelRef} startedAt={voice.startedAt} />
+      )}
+
       {/* Text */}
       <div className="px-4 pt-3.5">
         <textarea
           ref={textareaRef}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => { endDictation(); onChange(e.target.value); }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              if (hasContent && !busy) onSend();
+              if (hasContent && !busy) send();
             }
           }}
           rows={1}
           placeholder={
-            genMode
+            listening
+              ? "Listening… start speaking"
+              : genMode
               ? `Describe the ${formatLabel(format)} to generate…`
               : "Ask about your documents — or just say hello…"
           }
@@ -215,7 +286,15 @@ export function WorkspaceComposer({
           </Dropdown.Root>
         )}
 
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          {!busy && (
+            <VoiceButton
+              supported={voice.supported}
+              listening={listening}
+              disabled={uploading}
+              onToggle={toggleVoice}
+            />
+          )}
           {busy ? (
             <button
               onClick={onStop}
@@ -231,7 +310,7 @@ export function WorkspaceComposer({
             </button>
           ) : (
             <button
-              onClick={onSend}
+              onClick={send}
               disabled={!hasContent}
               aria-label={genMode ? "Generate" : "Send"}
               className="flex size-8 items-center justify-center rounded-full transition-all duration-150 disabled:cursor-not-allowed"
