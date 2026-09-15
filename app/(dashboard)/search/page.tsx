@@ -7,6 +7,7 @@ import { Search as SearchIcon, FileCode2, ChevronDown, Check } from "lucide-reac
 import { useRepos } from "@/lib/hooks/use-repos";
 import { useSearch } from "@/lib/hooks/use-search";
 import { truncatePath } from "@/lib/utils/format";
+import { SearchResultsSkeleton } from "@/components/ui/skeleton";
 
 export default function SearchPage() {
   return (
@@ -141,6 +142,8 @@ function SearchPageInner() {
               </p>
             </div>
           )}
+
+          {repoId && isFetching && !data?.results.length && <SearchResultsSkeleton />}
 
           {repoId && !isFetching && query.length > 2 && !data?.results.length && (
             <div className="py-16 text-center text-[13px]" style={{ color: "var(--text-tertiary)" }}>

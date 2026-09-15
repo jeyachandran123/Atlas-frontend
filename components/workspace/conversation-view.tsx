@@ -6,11 +6,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import { toast } from "sonner";
 import {
-  BookMarked, BookOpenCheck, ChevronDown, Download, Layers, Loader2,
-  Paperclip, Pencil, SendHorizonal, ShieldAlert, ShieldCheck, Sparkles,
-  SquareStack, Square, Trash2,
+  BookMarked, ChevronDown, Download, Layers, Loader2,
+  Pencil, ShieldAlert, ShieldCheck, Sparkles,
+  SquareStack, Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { ChatMessagesSkeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { MessageMarkdown } from "@/components/chat/message-markdown";
@@ -19,8 +20,11 @@ import {
 } from "@/components/knowledge/stage-indicator";
 import { BookmarkButton } from "@/components/workspace/bookmark-button";
 import { GeneratedDocumentCard } from "@/components/workspace/generated-document-card";
+import { MessageActions } from "@/components/workspace/message-actions";
+import { WorkspaceComposer } from "@/components/workspace/workspace-composer";
+import { WorkspaceHero } from "@/components/workspace/workspace-hero";
 import {
-  streamWorkspaceAsk, streamWorkspaceGenerate, workspaceApi,
+  streamWorkspaceAsk, streamWorkspaceDocumentTask, streamWorkspaceGenerate, workspaceApi,
 } from "@/lib/api/workspace";
 import { useDeleteConversation, useWorkspaces } from "@/lib/hooks/use-workspace";
 import { useOperationsStore } from "@/lib/stores/operations-store";
@@ -56,6 +60,8 @@ interface GenItem {
   current: string | null;
   artifact: ConversationArtifact | null;
   error: string | null;
+  /** Set when the instruction was a question rather than a request for a file. */
+  answer?: string;
 }
 
 type Item = AskItem | GenItem;
@@ -108,15 +114,17 @@ export function ConversationView({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // Bumped whenever a quick action fills the composer, so the caret lands
+  // where the user is about to type instead of leaving them to click.
+  const [focusSeq, setFocusSeq] = useState(0);
 
   const bottomRef = useRef<HTMLDivElement>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const hydratedRef = useRef<string | null>(null);
   const scrolledHashRef = useRef<string | null>(null);
 
   // Full restore payload — the single source for initial hydration.
-  const { data: restore } = useQuery({
+  const { data: restore, isLoading: restoring } = useQuery({
     queryKey: ["workspace-restore", workspaceId, conversationId],
     queryFn: () => workspaceApi.restore(workspaceId, conversationId),
   });
@@ -241,6 +249,77 @@ export function ConversationView({
   }, [workspaceId, conversationId, qc, patchAsk, syncWorkspace]);
 
   // ── Generate a document (native conversation capability) ──────────────────
+  /**
+   * Transform the document that is in scope, rather than authoring a new one.
+   *
+   * Generate builds a document from a prompt through a content model capped at
+   * 2000 rows and 50 columns - it cannot express "expand this 1251-row,
+   * 77-column sheet". When a single document is selected the request is almost
+   * always about that document, so it goes to the task engine instead: the
+   * real file, real column names, code run over every row.
+   */
+  const runDocumentTask = useCallback(
+    async (instruction: string, fmt: string, documentId: string) => {
+      const key = `gen-live-${Date.now()}`;
+      setBusy(true);
+      setItems((prev) => [...prev, {
+        kind: "gen", key, createdAt: Date.now(), prompt: instruction, format: fmt,
+        status: "running", stages: [], current: null, artifact: null, error: null,
+      }]);
+      let settled = false;
+
+      abortRef.current = streamWorkspaceDocumentTask(
+        workspaceId, documentId, instruction, fmt || null, conversationId,
+        (e) => {
+          if (e.event === "stage") {
+            patchGen(key, (g) => ({
+              stages: g.stages.includes(e.data.stage) ? g.stages : [...g.stages, e.data.stage],
+              current: e.data.stage,
+            }));
+          } else if (e.event === "done") {
+            settled = true;
+            if (e.data.kind === "answer") {
+              // The instruction was a question; the answer is the deliverable.
+              patchGen(key, {
+                status: "ready", current: null, error: null,
+                artifact: null, answer: e.data.answer ?? "",
+              });
+            } else {
+              patchGen(key, {
+                status: "ready",
+                current: null,
+                error: null,
+                artifact: {
+                  id: e.data.artifact_id!, title: e.data.filename ?? "Result",
+                  filename: e.data.filename ?? "result",
+                  format: (e.data.filename ?? "").split(".").pop() ?? fmt,
+                  status: "ready", prompt: instruction,
+                  size_bytes: e.data.size_bytes ?? 0, grounded: true, error: null,
+                  conversation_id: conversationId, created_at: new Date().toISOString(),
+                },
+              });
+            }
+            syncWorkspace();
+            qc.invalidateQueries({ queryKey: ["workspace-restore", workspaceId, conversationId] });
+          } else if (e.event === "error") {
+            settled = true;
+            patchGen(key, { status: "failed", current: null, error: e.data.message });
+          }
+        },
+        () => {
+          setBusy(false);
+          if (!settled) patchGen(key, { status: "failed", current: null, error: "The task failed" });
+        },
+        () => {
+          setBusy(false);
+          if (!settled) patchGen(key, { status: "cancelled", current: null });
+          syncWorkspace();
+        },
+      );
+    },
+    [workspaceId, conversationId, qc, patchGen, syncWorkspace],
+  );
+
   const generate = useCallback(async (prompt: string, fmt: string) => {
     const key = `gen-live-${Date.now()}`;
     setBusy(true);
@@ -297,11 +376,33 @@ export function ConversationView({
     const text = input.trim();
     if (!text || busy) return;
     setInput("");
-    if (genMode) void generate(text, format);
-    else void ask(text);
-  }, [input, busy, genMode, format, generate, ask]);
+    if (genMode) {
+      const scoped = restore?.documents ?? [];
+      if (scoped.length === 1) void runDocumentTask(text, format, scoped[0]!.id);
+      else void generate(text, format);
+    } else void ask(text);
+  }, [input, busy, genMode, format, generate, runDocumentTask, ask, restore]);
 
   const stop = useCallback(() => { abortRef.current?.abort(); }, []);
+
+  /** Ask the same question again — a fresh turn, not an edit of the old one. */
+  const retryAsk = useCallback((question: string) => {
+    if (busy) return;
+    void ask(question);
+  }, [busy, ask]);
+
+  /**
+   * Remove a message from this view.
+   *
+   * Local only, and deliberately so: the turn stays in the conversation's
+   * stored history, which is what the platform's audit trail and the grounded
+   * memory window both read. This clears the clutter in front of the user
+   * without quietly rewriting the record — a reload brings it back, which is
+   * the honest behaviour for something labelled "remove from this view".
+   */
+  const dropItem = useCallback((key: string) => {
+    setItems((prev) => prev.filter((it) => it.key !== key));
+  }, []);
 
   // Upload documents mid-conversation — confirmed, then atomic upload+attach.
   const runAttach = useCallback(
@@ -319,7 +420,6 @@ export function ConversationView({
         }
       }
       setUploading(false);
-      if (fileInput.current) fileInput.current.value = "";
       qc.invalidateQueries({ queryKey: ["workspace-restore", workspaceId, conversationId] });
       qc.invalidateQueries({ queryKey: ["workspace-documents", workspaceId] });
       qc.invalidateQueries({ queryKey: ["workspace-dashboard", workspaceId] });
@@ -441,24 +541,38 @@ export function ConversationView({
 
       {/* Thread */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
-        {!hasHistory && (
-          <div className="mt-16 text-center">
-            <BookOpenCheck className="mx-auto mb-3 size-8" style={{ color: "var(--text-muted)" }} />
-            <p className="text-[14px] font-medium" style={{ color: "var(--text-primary)" }}>Ask anything, or generate a document</p>
-            <p className="mt-1 text-[12px]" style={{ color: "var(--text-muted)" }}>
-              Grounded answers with citations. Turn on <span style={{ color: "var(--accent-bright)" }}>Generate</span> to create a PDF, Word, Excel and more — right inside the chat.
-            </p>
+        {restoring && !hasHistory ? (
+          // The history is on its way — not the empty "start a conversation" hero.
+          <div className="mx-auto max-w-2xl">
+            <ChatMessagesSkeleton />
           </div>
-        )}
+        ) : !hasHistory ? (
+          // The hero replaces the thread rather than sitting above it, so it
+          // can centre in the space instead of pushing an empty list around.
+          <WorkspaceHero
+            documentCount={contextCount}
+            onPick={(template) => {
+              setInput(template);
+              setFocusSeq((n) => n + 1);
+            }}
+          />
+        ) : (
         <div className="mx-auto flex max-w-2xl flex-col gap-5">
           {items.map((item, i) => {
             const isLast = i === items.length - 1;
             if (item.kind === "ask") {
               return (
-                <div key={item.key} className="flex flex-col gap-3">
-                  <div className="self-end rounded-2xl rounded-br-md px-4 py-2.5 text-[13.5px]"
-                    style={{ background: "var(--surface-3)", color: "var(--text-primary)", maxWidth: "85%" }}>
-                    {item.question}
+                <div key={item.key} className="group flex flex-col gap-3">
+                  <div className="flex flex-col items-end gap-1 self-end" style={{ maxWidth: "85%" }}>
+                    <div className="rounded-2xl rounded-br-md px-4 py-2.5 text-[13.5px]"
+                      style={{ background: "var(--surface-3)", color: "var(--text-primary)" }}>
+                      {item.question}
+                    </div>
+                    <MessageActions
+                      text={item.question}
+                      onRetry={busy ? undefined : () => retryAsk(item.question)}
+                      onDelete={() => dropItem(item.key)}
+                    />
                   </div>
                   {isLast && busy && item.stages.length > 0 && !item.answer && (
                     <div className="rounded-xl px-4 py-3" style={{ background: "var(--surface-1)", border: "1px solid var(--border-subtle)" }}>
@@ -487,6 +601,11 @@ export function ConversationView({
                               targetId={(item.turnId ?? item.id)!}
                               note={item.question.slice(0, 80)} label="Bookmark" />
                           )}
+                          <MessageActions
+                            text={item.answer}
+                            onRetry={busy ? undefined : () => retryAsk(item.question)}
+                            className="ml-auto"
+                          />
                         </div>
                       )}
                     </div>
@@ -522,6 +641,13 @@ export function ConversationView({
                 {(item.status === "ready" || item.status === "failed") && item.artifact && (
                   <GeneratedDocumentCard workspaceId={workspaceId} artifact={item.artifact} onDeleted={removeItem} />
                 )}
+                {item.status === "ready" && !item.artifact && item.answer && (
+                  // The instruction turned out to be a question - the number
+                  // computed over every row is the result, and there is no file.
+                  <div className="rounded-2xl rounded-bl-md px-4 py-3 text-[13px] whitespace-pre-wrap" style={{ background: "var(--surface-1)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", maxWidth: "95%" }}>
+                    {item.answer}
+                  </div>
+                )}
                 {item.status === "failed" && !item.artifact && (
                   <div className="rounded-2xl rounded-bl-md px-4 py-3 text-[13px]" style={{ background: "var(--surface-1)", border: "1px solid var(--border-subtle)", color: "var(--status-error)", maxWidth: "95%" }}>
                     {item.error ?? "Generation failed."}
@@ -531,88 +657,32 @@ export function ConversationView({
             );
           })}
         </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
       {/* Composer — the single entry point for chat AND generation */}
       <div className="px-6 pb-5">
-        <div className="mx-auto flex max-w-2xl flex-col gap-2 rounded-xl p-2"
-          style={{ background: "var(--surface-1)", border: `1px solid ${genMode ? "var(--accent-border)" : "var(--border-default)"}`, boxShadow: "var(--shadow-sm)" }}>
-          {/* Mode row: Generate toggle + document-type selector */}
-          <div className="flex items-center gap-1.5 px-1">
-            <button
-              onClick={() => setGenMode((v) => !v)}
-              disabled={busy}
-              aria-pressed={genMode}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors disabled:opacity-50"
-              style={{
-                background: genMode ? "var(--accent-subtle)" : "var(--surface-3)",
-                border: `1px solid ${genMode ? "var(--accent-border)" : "var(--border-subtle)"}`,
-                color: genMode ? "var(--accent-bright)" : "var(--text-secondary)",
-              }}
-            >
-              <Sparkles className="size-3.5" /> Generate
-            </button>
-            {genMode && (
-              <Dropdown.Root>
-                <Dropdown.Trigger asChild>
-                  <button
-                    disabled={busy}
-                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors disabled:opacity-50"
-                    style={{ background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}>
-                    {formatLabel(format)} <ChevronDown className="size-3" />
-                  </button>
-                </Dropdown.Trigger>
-                <Dropdown.Portal>
-                  <Dropdown.Content align="start" sideOffset={6}
-                    className="z-50 w-36 overflow-hidden rounded-xl p-1.5 animate-scale-up"
-                    style={{ background: "var(--surface-overlay)", backdropFilter: "blur(24px)", border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-xl)" }}>
-                    {GEN_FORMATS.map((f) => (
-                      <Dropdown.Item key={f.value} onSelect={() => setFormat(f.value)}
-                        className="flex cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-[13px] outline-none transition-colors data-[highlighted]:bg-[var(--surface-3)]"
-                        style={{ color: "var(--text-primary)" }}>
-                        {f.label}
-                        {format === f.value && <span className="size-1.5 rounded-full" style={{ background: "var(--accent-bright)" }} />}
-                      </Dropdown.Item>
-                    ))}
-                  </Dropdown.Content>
-                </Dropdown.Portal>
-              </Dropdown.Root>
-            )}
-            {genMode && (
-              <span className="ml-auto pr-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
-                Grounded in this conversation
-              </span>
-            )}
-          </div>
-
-          {/* Input row */}
-          <div className="flex items-end gap-2">
-            <button onClick={() => fileInput.current?.click()} disabled={uploading || busy} aria-label="Attach document"
-              className="rounded-lg p-2 transition-colors hover:bg-[var(--surface-3)] disabled:opacity-50" style={{ color: "var(--text-muted)" }}>
-              {uploading ? <Loader2 className="size-4 animate-spin" /> : <Paperclip className="size-4" />}
-            </button>
-            <input ref={fileInput} type="file" multiple hidden onChange={(e) => attachDocuments(e.target.files)} />
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-              rows={1}
-              placeholder={genMode ? `Describe the ${formatLabel(format)} to generate…` : "Ask about your documents…"}
-              className="max-h-32 flex-1 resize-none bg-transparent px-1 py-1.5 text-[13.5px] outline-none"
-              style={{ color: "var(--text-primary)" }}
-            />
-            {busy ? (
-              <Button size="icon-sm" variant="outline" onClick={stop} aria-label="Stop">
-                <Square className="fill-current" />
-              </Button>
-            ) : (
-              <Button size="icon-sm" variant="signal" onClick={send} disabled={!input.trim()}
-                aria-label={genMode ? "Generate" : "Send"}>
-                {genMode ? <Sparkles /> : <SendHorizonal />}
-              </Button>
-            )}
-          </div>
+        <div className="mx-auto max-w-2xl">
+          <WorkspaceComposer
+            value={input}
+            onChange={setInput}
+            onSend={send}
+            onStop={stop}
+            onAttach={attachDocuments}
+            busy={busy}
+            uploading={uploading}
+            genMode={genMode}
+            onToggleGen={() => setGenMode((v) => !v)}
+            format={format}
+            formatLabel={formatLabel}
+            formats={GEN_FORMATS}
+            onFormatChange={setFormat}
+            autoFocus={focusSeq > 0}
+          />
+          <p className="mt-2.5 text-center text-[11px]" style={{ color: "var(--text-muted)" }}>
+            UnityWorks can make mistakes. Verify important information.
+          </p>
         </div>
       </div>
 

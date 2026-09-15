@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, type KeyboardEvent } from "react";
-import { ArrowUp, Square, Plus, ChevronDown, Check, Paperclip, Camera, X, FileText, Image as ImageIcon } from "lucide-react";
+import { ArrowUp, Square, Plus, ChevronDown, Check, Paperclip, Camera, X, FileText, Image as ImageIcon, Brain } from "lucide-react";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { RepoSelector } from "@/components/layout/repo-selector";
 
@@ -25,9 +25,44 @@ const AGENTS = [
     description: "Hotel, ERP, POS & stock management specialist",
     dot: "#fbbf24",
   },
+  {
+    id: "reasoning",
+    label: "Reasoning",
+    description: "Deepest model, step by step — slower, for hard questions",
+    dot: "#f472b6",
+  },
+  {
+    id: "math",
+    label: "Mathematics",
+    description: "Deepest model, checked working — slower",
+    dot: "#38bdf8",
+  },
+  {
+    id: "planning",
+    label: "Agent planning",
+    description: "Breaks a goal into ordered, checkable steps",
+    dot: "#a78bfa",
+  },
 ] as const;
 
+/* Modes whose profile thinks by default (mirrors backend app/llm/profiles.py). */
+const THINKS_BY_DEFAULT = new Set<string>(["code", "reasoning", "math", "planning"]);
+
 type AgentId = (typeof AGENTS)[number]["id"];
+
+/* ── [Blanks] from quick-start templates ───────────────────────── */
+const BLANKS = /\[[^\]\n]+\]/g;
+const HAS_BLANK = /\[[^\]\n]+\]/;
+
+/** Select the next [blank] at or after `from`, wrapping to the first. True if there was one. */
+function selectBlank(el: HTMLTextAreaElement, from: number): boolean {
+  const matches = [...el.value.matchAll(BLANKS)];
+  if (matches.length === 0) return false;
+  const next = matches.find((m) => (m.index ?? 0) >= from) ?? matches[0]!;
+  const start = next.index ?? 0;
+  el.setSelectionRange(start, start + next[0].length);
+  return true;
+}
 
 /* ── Attached file type ────────────────────────────────────────── */
 interface AttachedFile {
@@ -48,6 +83,8 @@ export function ChatInput({
   const [value, setValue] = useState("");
   const agent = useChatStore((s) => s.agentMode);
   const setAgent = useChatStore((s) => s.setAgentMode);
+  const thinking = useChatStore((s) => s.thinking);
+  const setThinking = useChatStore((s) => s.setThinking);
   const [agentOpen, setAgentOpen] = useState(false);
   const [switchedTo, setSwitchedTo] = useState<string | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -59,7 +96,28 @@ export function ChatInput({
   const attachRef = useRef<HTMLDivElement>(null);
 
   const hasContent = value.trim().length > 0 || attachedFiles.length > 0;
+  const hasBlank = HAS_BLANK.test(value);
   const selectedAgent = AGENTS.find((a) => a.id === agent)!;
+
+  /* A quick-start card fills the box — a template with [blanks], maybe a
+     file — and hands over. Nothing is sent until the user presses Enter. */
+  const draft = useChatStore((s) => s.composerDraft);
+  const setComposerDraft = useChatStore((s) => s.setComposerDraft);
+  useEffect(() => {
+    if (!draft) return;
+    setValue(draft.text);
+    if (draft.files?.length) handleFiles(draft.files);
+    setComposerDraft(null);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+      if (!selectBlank(el, 0)) el.setSelectionRange(el.value.length, el.value.length);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
 
   /* Close dropdowns on outside click */
   useEffect(() => {
@@ -125,7 +183,12 @@ export function ChatInput({
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); return; }
+    // Tab moves between a template's [blanks] while there are any; otherwise it is plain Tab.
+    if (e.key === "Tab" && !e.shiftKey && hasBlank) {
+      const el = e.currentTarget;
+      if (selectBlank(el, el.selectionEnd)) e.preventDefault();
+    }
   }
 
   function onTextInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -135,7 +198,7 @@ export function ChatInput({
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }
 
-  function handleFiles(files: FileList | null) {
+  function handleFiles(files: FileList | File[] | null) {
     if (!files) return;
     Array.from(files).forEach((file) => {
       const id = `${file.name}-${Date.now()}-${Math.random()}`;
@@ -198,7 +261,7 @@ export function ChatInput({
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/*,.pdf,.docx,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.go,.rs,.java,.cs,.cpp,.c,.html,.css,.yaml,.yml,.toml,.sh"
+        accept="image/*,.pdf,.docx,.xlsx,.xlsm,.txt,.md,.csv,.tsv,.json,.ts,.tsx,.js,.jsx,.py,.go,.rs,.java,.cs,.cpp,.c,.html,.css,.yaml,.yml,.toml,.sh"
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
@@ -226,6 +289,15 @@ export function ChatInput({
             }}
           />
           Switched to <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{switchedTo} mode</span>
+        </div>
+      )}
+
+      {/* How to fill a quick-start template */}
+      {hasBlank && !isStreaming && (
+        <div className="flex flex-wrap items-center gap-1.5 px-5 pt-3 text-[11.5px] animate-fade-in" style={{ color: "var(--text-muted)" }}>
+          Replace the <span style={{ color: "var(--accent-bright)" }}>[bracketed]</span> parts
+          <span aria-hidden>·</span>
+          <kbd className="kbd">Tab</kbd> jumps to the next one
         </div>
       )}
 
@@ -355,6 +427,35 @@ export function ChatInput({
               </div>
             )}
           </div>
+
+          {/* Thinking: Auto (the mode's default) → On → Off → Auto */}
+          {(() => {
+            const effective = thinking ?? THINKS_BY_DEFAULT.has(agent);
+            const label = thinking === null ? `Think: auto` : thinking ? "Think: on" : "Think: off";
+            const next = thinking === null ? true : thinking ? false : null;
+            return (
+              <button
+                onClick={() => setThinking(next)}
+                disabled={isStreaming}
+                title={
+                  thinking === null
+                    ? `Following ${selectedAgent.label}'s default (${effective ? "thinks first" : "answers directly"}). Click to force on.`
+                    : thinking
+                    ? "The model reasons before answering — slower, better on hard problems. Click to force off."
+                    : "The model answers directly — fastest. Click to return to the mode's default."
+                }
+                className="menu-trigger flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium disabled:opacity-50"
+                style={{
+                  color: effective ? "var(--accent-bright)" : "var(--text-tertiary)",
+                  background: thinking === true ? "var(--accent-subtle)" : undefined,
+                }}
+                aria-label={label}
+              >
+                <Brain className="size-3.5" />
+                {label}
+              </button>
+            );
+          })()}
 
           {/* Repo selector — code mode only, after agent selector */}
           {agent === "code" && (

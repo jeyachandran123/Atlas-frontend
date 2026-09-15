@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { QueryProvider } from "@/app/providers";
-// TypeScript may complain about CSS side-effect imports in some setups.
-// @ts-ignore: CSS module side-effect import
 import "./globals.css";
 
 // Self-hosted variable fonts — every weight renders crisply (no synthetic
@@ -21,8 +19,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "UnityWorks — AI Coding Assistant",
-  description: "A self-hosted AI coding assistant grounded in your codebase.",
+  title: "UnityWorks — AI Assistant",
+  description: "A self-hosted AI assistant grounded in your codebase.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

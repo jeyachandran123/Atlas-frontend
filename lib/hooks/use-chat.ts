@@ -1,19 +1,44 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
+import { toast } from "sonner";
 import { chatApi, streamChatMessage } from "@/lib/api/chat";
+import { libraryApi } from "@/lib/api/library";
 import { useChatStore } from "@/lib/stores/chat-store";
-import type { ChatRequest, MessageOut } from "@/types/api";
+import type { ChatRequest, MessageOut, AgentMode } from "@/types/api";
 
 export const chatKeys = {
-  conversations: (limit?: number, offset?: number) => 
+  conversations: (limit?: number, offset?: number) =>
     ["conversations", { limit, offset }] as const,
+  conversationsInfinite: (limit: number) => ["conversations", "infinite", { limit }] as const,
   messages: (conversationId: string) => ["conversations", conversationId, "messages"] as const,
 };
 
+/** One page of conversations — for callers that only need the most recent. */
 export function useConversations(limit = 15, offset = 0) {
   return useQuery({
     queryKey: chatKeys.conversations(limit, offset),
     queryFn: () => chatApi.listConversations(limit, offset),
+  });
+}
+
+/**
+ * Every conversation, loaded a page at a time and kept.
+ *
+ * The sidebar used to pass a growing offset to ``useConversations``, which is a
+ * different query per offset — so scrolling to the end swapped the whole list
+ * for the next page. Today and the previous week vanished and there was nothing
+ * above to scroll back to. Here pages accumulate, and an invalidation (a new
+ * chat, a rename, a pin) refetches every page already loaded, in order.
+ */
+export function useInfiniteConversations(limit = 20) {
+  return useInfiniteQuery({
+    queryKey: chatKeys.conversationsInfinite(limit),
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => chatApi.listConversations(limit, pageParam),
+    getNextPageParam: (lastPage, _pages, lastPageParam) => {
+      const next = lastPageParam + limit;
+      return next < lastPage.total ? next : undefined;
+    },
   });
 }
 
@@ -90,9 +115,13 @@ export function useCreateConversation() {
  */
 export function useStreamChat() {
   const queryClient = useQueryClient();
-  const { startStream, applyStreamEvent, endStream, activeConversationId, setActiveConversation, addMessageImages } =
-    useChatStore();
+  const {
+    startStream, applyStreamEvent, endStream, activeConversationId, setActiveConversation,
+    addMessageImages, adoptStreamConversation, transferMessageImages,
+  } = useChatStore();
   const controllerRef = useRef<AbortController | null>(null);
+  /** Temporary message id → the id the server saved it under. */
+  const realIdsRef = useRef(new Map<string, string>());
 
   const send = useCallback(
     (message: string, repoId?: string, agentMode: string = "auto", files?: File[]) => {
@@ -167,23 +196,54 @@ export function useStreamChat() {
         ]);
       }
 
+      // Read at send time, not captured at render: the toggle may have
+      // changed since this callback was created.
+      const thinking = useChatStore.getState().thinking;
+
       const payload: ChatRequest = {
         message,
         conversation_id: conversationId,
         repo_id: repoId,
-        agent_mode: agentMode as "auto" | "code" | "business",
+        agent_mode: agentMode as AgentMode,
+        ...(thinking === null ? {} : { thinking }),
       };
 
       const controller = streamChatMessage(
         payload,
         (event) => {
+          if (event.type === "meta") {
+            // The server has saved the prompt. Swap the temporary id for the
+            // real one now, so edit / retry / delete act on the saved message
+            // even when this reply is stopped before it finishes.
+            const realId = event.user_message_id;
+            const convId = event.conversation_id;
+            realIdsRef.current.set(optimisticUserMessage.id, realId);
+            if (!conversationId && convId) {
+              adoptStreamConversation(convId);
+              if (typeof window !== "undefined" && window.location.pathname === "/chat") {
+                window.history.replaceState(null, "", `/chat/${convId}`);
+              }
+            }
+            queryClient.setQueryData<MessageOut[]>(chatKeys.messages(convId), (old) =>
+              old?.map((m) =>
+                m.id === optimisticUserMessage.id ? { ...m, id: realId, conversation_id: convId } : m,
+              ),
+            );
+            transferMessageImages(optimisticUserMessage.id, realId);
+            return;
+          }
           if (event.type === "done" || event.type === "error") {
             // Adopt the conversation even on error — the backend has already
             // created it and saved the user message. Without this, every
             // failed send would spawn a brand-new conversation.
             // (Runs BEFORE applyStreamEvent: setActiveConversation resets
             // streamError, which would otherwise hide the error banner.)
-            if (!activeConversationId && event.conversation_id) {
+            // Already adopted when the turn's meta event arrived — adopting
+            // again would clear the reply that was just streamed.
+            if (
+              !activeConversationId && event.conversation_id
+              && useChatStore.getState().activeConversationId !== event.conversation_id
+            ) {
               setActiveConversation(event.conversation_id);
               // ChatGPT-style URL adoption: swap /chat → /chat/{id} in place.
               // history.replaceState avoids a route remount, so the streamed
@@ -198,6 +258,8 @@ export function useStreamChat() {
               queryClient.invalidateQueries({ queryKey: chatKeys.messages(finalConvId) });
             }
             queryClient.invalidateQueries({ queryKey: ["conversations"] });
+            // Uploads and created files belong in the Library as soon as they exist.
+            queryClient.invalidateQueries({ queryKey: ["library"] });
           }
           applyStreamEvent(event);
         },
@@ -212,73 +274,147 @@ export function useStreamChat() {
       controllerRef.current = controller;
       startStream(controller, optimisticUserMessage, conversationId ?? null);
     },
-    [activeConversationId, applyStreamEvent, endStream, queryClient, setActiveConversation, startStream, addMessageImages],
+    [
+      activeConversationId, applyStreamEvent, endStream, queryClient, setActiveConversation,
+      startStream, addMessageImages, adoptStreamConversation, transferMessageImages,
+    ],
   );
 
   /**
-   * Edit: truncate the conversation from the given message onwards,
-   * then re-send with the new text. The old message disappears.
+   * The saved id of a message the list may still hold under its temporary one.
+   *
+   * A stopped reply never reaches "done", so its prompt can stay in the list as
+   * `optimistic-…` although the server saved it. Acting on that temporary id
+   * used to skip the server entirely: the saved prompt survived an edit and
+   * showed up twice. The meta event normally supplies the real id; when the
+   * stop came even before that, the saved prompt is found by its text.
+   * null means nothing was saved.
    */
-  const editAndResend = useCallback(
-    async (messageId: string, newText: string, repoId?: string) => {
-      const conversationId = activeConversationId;
-      if (!conversationId) return;
-
-      const isOptimistic = messageId.startsWith("optimistic-");
-
-      if (!isOptimistic) {
-        // Real DB message — truncate from this point
-        await chatApi.truncateMessagesFrom(conversationId, messageId);
+  const savedId = useCallback(
+    async (conversationId: string, messageId: string, content?: string): Promise<string | null> => {
+      if (!messageId.startsWith("optimistic-")) return messageId;
+      const known = realIdsRef.current.get(messageId);
+      if (known) return known;
+      const text = content
+        ?? queryClient.getQueryData<MessageOut[]>(chatKeys.messages(conversationId))
+          ?.find((m) => m.id === messageId)?.content
+        ?? useChatStore.getState().optimisticUserMessage?.content;
+      if (!text) return null;
+      try {
+        const saved = await chatApi.getMessages(conversationId);
+        return [...saved].reverse().find((m) => m.role === "user" && m.content === text)?.id ?? null;
+      } catch {
+        return null;
       }
+    },
+    [queryClient],
+  );
 
-      // Remove from local cache from this message onwards
+  /** Remove a message and everything after it — on the server and in the list. */
+  const truncateFrom = useCallback(
+    async (conversationId: string, messageId: string, content?: string) => {
+      const id = await savedId(conversationId, messageId, content);
+      if (id) await chatApi.truncateMessagesFrom(conversationId, id);
       queryClient.setQueryData<MessageOut[]>(chatKeys.messages(conversationId), (old = []) => {
-        const idx = old.findIndex((m) => m.id === messageId);
+        const idx = old.findIndex((m) => m.id === messageId || m.id === id);
         return idx === -1 ? old : old.slice(0, idx);
       });
-
-      send(newText, repoId, "auto");
     },
-    [activeConversationId, queryClient, send],
+    [queryClient, savedId],
+  );
+
+  /**
+   * A message's attachments, fetched back as files so an edit or a retry can
+   * send them again — deleting the old message deletes its files, so this runs
+   * first. `keep` narrows it to the ones left on the message while editing.
+   * null means a file could not be fetched, and nothing should change.
+   */
+  const attachmentsOf = useCallback(
+    async (conversationId: string, messageId: string, keep?: string[]): Promise<File[] | null> => {
+      const message = queryClient
+        .getQueryData<MessageOut[]>(chatKeys.messages(conversationId))
+        ?.find((m) => m.id === messageId);
+      const previews = (useChatStore.getState().messageImages[messageId] ?? [])
+        .filter((p) => !p.isDocument && p.url);
+      const wanted = (id: string) => !keep || keep.includes(id);
+      const asFile = async (bytes: Promise<Blob>, name: string, type: string) => {
+        const blob = await bytes;
+        return new File([blob], name, { type: type || blob.type });
+      };
+      // This session's own copy when it still has one; the saved file otherwise.
+      const localBytes = (url: string) => fetch(url).then((r) => r.blob());
+
+      const jobs: Promise<File>[] = [];
+      const savedImages = message?.images ?? [];
+      if (savedImages.length > 0) {
+        for (const img of savedImages) {
+          if (!wanted(img.id)) continue;
+          const copy = previews.find((p) => p.name === img.filename);
+          jobs.push(asFile(copy ? localBytes(copy.url) : libraryApi.fileBlob("image", img.id), img.filename, img.mime_type));
+        }
+      } else {
+        // Stopped before the server answered: only this session's previews exist.
+        for (const p of previews) {
+          if (wanted(p.id)) jobs.push(asFile(localBytes(p.url), p.name, ""));
+        }
+      }
+      for (const doc of message?.documents ?? []) {
+        if (wanted(doc.id)) jobs.push(asFile(libraryApi.fileBlob("document", doc.id), doc.filename, doc.mime_type));
+      }
+      try {
+        return await Promise.all(jobs);
+      } catch {
+        toast.error("Couldn't re-attach this message's files, so it was left as it was.");
+        return null;
+      }
+    },
+    [queryClient],
+  );
+
+  /**
+   * Edit: truncate the conversation from the given message onwards, then send
+   * the new text — with the message's attachments, bar any removed while editing.
+   */
+  const editAndResend = useCallback(
+    async (messageId: string, newText: string, repoId?: string, keep?: string[]) => {
+      const conversationId = activeConversationId;
+      if (!conversationId) return;
+      const files = await attachmentsOf(conversationId, messageId, keep);
+      if (files === null) return;
+      await truncateFrom(conversationId, messageId);
+      send(newText, repoId, "auto", files.length > 0 ? files : undefined);
+    },
+    [activeConversationId, attachmentsOf, send, truncateFrom],
   );
 
   const retry = useCallback(
     async (messageId: string, content: string, repoId?: string) => {
       const conversationId = activeConversationId;
       if (!conversationId) return;
-
-      const isOptimistic = messageId.startsWith("optimistic-");
-
-      if (!isOptimistic) {
-        await chatApi.truncateMessagesFrom(conversationId, messageId);
-      }
-
-      queryClient.setQueryData<MessageOut[]>(chatKeys.messages(conversationId), (old = []) => {
-        const idx = old.findIndex((m) => m.id === messageId);
-        return idx === -1 ? old : old.slice(0, idx);
-      });
-
-      send(content, repoId, "auto");
+      const files = await attachmentsOf(conversationId, messageId);
+      if (files === null) return;
+      await truncateFrom(conversationId, messageId, content);
+      send(content, repoId, "auto", files.length > 0 ? files : undefined);
     },
-    [activeConversationId, queryClient, send],
+    [activeConversationId, attachmentsOf, send, truncateFrom],
   );
 
   const stop = useCallback(() => {
     controllerRef.current?.abort();
-  }, []);
+    // The prompt was saved before the reply began: bring the list in line with
+    // the server, so the stopped prompt carries its real id from here on.
+    const convId = useChatStore.getState().activeConversationId;
+    if (convId) void queryClient.invalidateQueries({ queryKey: chatKeys.messages(convId) });
+  }, [queryClient]);
 
   const deleteMessage = useCallback(
     async (messageId: string) => {
       const conversationId = activeConversationId;
       if (!conversationId) return;
-      // Use truncateMessagesFrom so the user message + its assistant reply are both deleted
-      await chatApi.truncateMessagesFrom(conversationId, messageId);
-      queryClient.setQueryData<MessageOut[]>(chatKeys.messages(conversationId), (old = []) => {
-        const idx = old.findIndex((m) => m.id === messageId);
-        return idx === -1 ? old : old.slice(0, idx);
-      });
+      // Truncating removes the user message and its reply together
+      await truncateFrom(conversationId, messageId);
     },
-    [activeConversationId, queryClient],
+    [activeConversationId, truncateFrom],
   );
 
   return { send, editAndResend, retry, deleteMessage, stop };

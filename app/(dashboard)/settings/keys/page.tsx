@@ -1,18 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Key, Plus, Trash2, Copy, Check, User, LogOut } from "lucide-react";
+import { Key, Plus, Trash2, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
-import { useApiKeys, useCreateApiKey, useRevokeApiKey, useLogout } from "@/lib/hooks/use-auth";
-import { useAuthStore } from "@/lib/stores/auth-store";
+import { useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/lib/hooks/use-auth";
 import { formatRelativeTime } from "@/lib/utils/format";
+import { KeyRowsSkeleton } from "@/components/ui/skeleton";
 
+/** API keys — for the CLI and IDE extensions. Account settings live on /settings. */
 export default function ApiKeysPage() {
-  const user = useAuthStore((s) => s.user);
-  const { data: keys = [] } = useApiKeys();
+  const { data: keys = [], isLoading } = useApiKeys();
   const createKey = useCreateApiKey();
   const revokeKey = useRevokeApiKey();
-  const logout = useLogout();
   const [newKeyName, setNewKeyName] = useState("");
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -50,53 +49,6 @@ export default function ApiKeysPage() {
 
       <div className="px-8 py-6">
         <div className="mx-auto max-w-2xl space-y-4">
-
-          {/* User card */}
-          {user && (
-            <div
-              className="flex items-center gap-3 rounded-xl p-4"
-              style={{
-                background: "var(--surface-1)",
-                border: "1px solid var(--border-default)",
-                boxShadow: "var(--shadow-sm)",
-              }}
-            >
-              <div
-                className="flex size-9 shrink-0 items-center justify-center rounded-xl"
-                style={{ background: "var(--accent-subtle)", border: "1px solid var(--accent-border)" }}
-              >
-                <User className="size-4" style={{ color: "var(--accent-bright)" }} />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>
-                  {user.full_name || user.email}
-                </p>
-                <p className="truncate text-[11px]" style={{ color: "var(--text-tertiary)" }}>
-                  {user.email}
-                </p>
-              </div>
-              <span
-                className="status-badge ml-auto shrink-0 capitalize"
-                style={{
-                  background: "var(--accent-subtle)",
-                  border: "1px solid var(--accent-border)",
-                  color: "var(--accent-glow)",
-                }}
-              >
-                {user.role}
-              </span>
-              <button
-                onClick={() => logout.mutate()}
-                disabled={logout.isPending}
-                className="ghost-btn flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium"
-                style={{ color: "var(--danger)" }}
-                title="Sign out"
-              >
-                <LogOut className="size-3.5" />
-                {logout.isPending ? "Signing out…" : "Sign out"}
-              </button>
-            </div>
-          )}
 
           {/* Revealed key */}
           {revealedKey && (
@@ -178,7 +130,9 @@ export default function ApiKeysPage() {
             >
               Active keys ({keys.length})
             </p>
-            {keys.length === 0 ? (
+            {isLoading ? (
+              <KeyRowsSkeleton />
+            ) : keys.length === 0 ? (
               <div
                 className="flex flex-col items-center gap-3 rounded-xl py-12 text-center"
                 style={{

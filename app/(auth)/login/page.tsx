@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { useLogin, useFirebaseLogin } from "@/lib/hooks/use-auth";
 import { signInWithGoogle } from "@/lib/firebase";
+import { PasswordInput } from "@/components/auth/password-input";
 import { ApiError } from "@/types/api";
 
 const schema = z.object({
@@ -119,8 +120,7 @@ export default function LoginPage() {
           />
         </Field>
         <Field label="Password" error={errors.password?.message}>
-          <input
-            type="password"
+          <PasswordInput
             autoComplete="current-password"
             placeholder="••••••••"
             {...register("password")}

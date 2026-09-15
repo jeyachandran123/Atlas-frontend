@@ -1,26 +1,38 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RotateCcw, Share2, Check, AlertCircle } from "lucide-react";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { StreamingMessageBubble } from "@/components/chat/streaming-message-bubble";
 import { ChatInput } from "@/components/chat/chat-input";
-import { QuickActions } from "@/components/chat/quick-actions";
+import { QuickActions, type QuickStart } from "@/components/chat/quick-actions";
+import { PromptNavigator, type PromptEntry } from "@/components/chat/prompt-navigator";
+import { ScrollToBottomButton } from "@/components/chat/scroll-to-bottom";
+import { ChatMessagesSkeleton } from "@/components/ui/skeleton";
 import { useMessages, useStreamChat, useConversations } from "@/lib/hooks/use-chat";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useAuthStore } from "@/lib/stores/auth-store";
+
+/** How close to the bottom still counts as "reading the latest". */
+const NEAR_BOTTOM_PX = 120;
+/** Where a prompt lands when jumped to — a little breathing room above it. */
+const JUMP_OFFSET_PX = 16;
 
 export function ChatThread() {
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const selectedRepoId = useChatStore((s) => s.selectedRepoId);
   const streamingConversationId = useChatStore((s) => s.streamingConversationId);
   const streamingContent = useChatStore((s) => s.streamingContent);
+  const streamingReasoning = useChatStore((s) => s.streamingReasoning);
+  const streamingFileStage = useChatStore((s) => s.streamingFileStage);
+  const streamingFile = useChatStore((s) => s.streamingFile);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const activeToolCall = useChatStore((s) => s.activeToolCall);
   const streamError = useChatStore((s) => s.streamError);
   const optimisticUserMessage = useChatStore((s) => s.optimisticUserMessage);
   const resetStreamingContent = useChatStore((s) => s.resetStreamingContent);
   const clearOptimisticMessage = useChatStore((s) => s.clearOptimisticMessage);
+  const streamEndedAt = useChatStore((s) => s.streamEndedAt);
 
   // Only show streaming state if it belongs to the currently viewed conversation
   const isActiveStream = isStreaming && streamingConversationId === activeConversationId;
@@ -30,8 +42,20 @@ export function ChatThread() {
   const showStreamError = streamError && streamingConversationId === activeConversationId;
   const showOptimistic = optimisticUserMessage && streamingConversationId === activeConversationId;
 
-  const { data: messages = [], isLoading } = useMessages(activeConversationId);
+  const { data: messages = [], isLoading, dataUpdatedAt } = useMessages(activeConversationId);
   const { send, editAndResend, retry, deleteMessage, stop } = useStreamChat();
+
+  // The streamed reply stays on screen after the stream ends, until its saved
+  // copy is in the list — the refetch takes a moment, and clearing it sooner
+  // left the answer blank in between. The hand-over ends when the reply is the
+  // last message, or when fresh data from after the stream arrives (a stopped
+  // or failed turn saves no reply). Both are decided in the same render the
+  // saved copy appears in, so the two never show together.
+  const lastMessage = messages[messages.length - 1];
+  const handingOver =
+    !isActiveStream && !streamError && streamEndedAt !== null
+    && streamingConversationId === activeConversationId
+    && lastMessage?.role !== "assistant" && dataUpdatedAt <= streamEndedAt;
 
   // Conversation title for the header (best-effort from the cached list)
   const { data: convData } = useConversations();
@@ -41,8 +65,15 @@ export function ChatThread() {
     retry(messageId, content, selectedRepoId ?? undefined);
   }
 
-  function handleEdit(messageId: string, newContent: string) {
-    editAndResend(messageId, newContent, selectedRepoId ?? undefined);
+  // A quick-start card fills the prompt box and picks the mode — it never sends.
+  function startFromCard(start: QuickStart) {
+    const store = useChatStore.getState();
+    store.setAgentMode(start.mode);
+    store.setComposerDraft({ text: start.text, files: start.files });
+  }
+
+  function handleEdit(messageId: string, newContent: string, keep?: string[]) {
+    editAndResend(messageId, newContent, selectedRepoId ?? undefined, keep);
   }
 
   // Last user message for error-banner retry
@@ -61,30 +92,122 @@ export function ChatThread() {
     return -1;
   })();
 
+  // The prompts, in order — what the navigator lists and jumps between.
+  const prompts: PromptEntry[] = useMemo(
+    () =>
+      messages
+        .filter((m) => m.role === "user")
+        .map((m) => ({
+          id: m.id,
+          text: m.content?.trim() || m.documents?.[0]?.filename || m.images?.[0]?.filename || "Attachment",
+          time: m.created_at,
+        })),
+    [messages],
+  );
+
+  // ── Scrolling ──────────────────────────────────────────────────────────────
+  //
+  // The rule: follow new content only while the reader is at the bottom. The
+  // moment they scroll up, they are reading something, and a streaming reply
+  // must not drag them away from it. Following resumes when they come back
+  // down on their own, or press the button.
   const scrollRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  // Track whether user is near the bottom — only auto-scroll if they are
-  const isNearBottomRef = useRef(true);
+  const followRef = useRef(true);
+  const rafRef = useRef<number | null>(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const [hasNewBelow, setHasNewBelow] = useState(false);
+  const [activePromptId, setActivePromptId] = useState<string | null>(null);
+  const [flashId, setFlashId] = useState<string | null>(null);
+
+  const updateActivePrompt = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || prompts.length === 0) return;
+    const line = el.getBoundingClientRect().top + 96;
+    let current = prompts[0]!.id;
+    for (const p of prompts) {
+      const node = el.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(p.id)}"]`);
+      if (!node) continue;
+      if (node.getBoundingClientRect().top <= line) current = p.id;
+      else break;
+    }
+    setActivePromptId(current);
+  }, [prompts]);
 
   function handleScroll() {
     const el = scrollRef.current;
     if (!el) return;
-    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+    followRef.current = near;
+    setAtBottom(near);
+    if (near) setHasNewBelow(false);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        updateActivePrompt();
+      });
+    }
   }
 
-  useEffect(() => {
-    if (!isActiveStream && activeStreamContent && messages.length > 0) {
-      const t = setTimeout(() => { resetStreamingContent(); clearOptimisticMessage(); }, 100);
-      return () => clearTimeout(t);
-    }
-  }, [isActiveStream, activeStreamContent, messages.length, resetStreamingContent, clearOptimisticMessage]);
+  // A wheel or touch upwards is intent, and it is known before the scroll
+  // event lands — acting on it here means the next streamed token cannot win
+  // a race against the reader's own hand.
+  function handleWheel(e: React.WheelEvent) {
+    if (e.deltaY < 0) followRef.current = false;
+  }
+  function handleTouchMove() {
+    followRef.current = false;
+  }
 
-  // Auto-scroll only when user is already near the bottom
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    followRef.current = true;
+    setHasNewBelow(false);
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  }, []);
+
+  const jumpToPrompt = useCallback((id: string) => {
+    const el = scrollRef.current;
+    const node = el?.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(id)}"]`);
+    if (!el || !node) return;
+    followRef.current = false;
+    el.scrollTo({ top: Math.max(0, node.offsetTop - JUMP_OFFSET_PX), behavior: "smooth" });
+    setActivePromptId(id);
+    setFlashId(id);
+    window.setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 1600);
+  }, []);
+
+  // Opening a conversation starts at its latest message.
   useEffect(() => {
-    if (isNearBottomRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    followRef.current = true;
+    setHasNewBelow(false);
+    setAtBottom(true);
+  }, [activeConversationId]);
+
+  // Follow new content — instantly, not smoothly: a smooth scroll started on
+  // every streamed token is an animation that never finishes, and it fights
+  // any scroll the reader starts while it runs.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (followRef.current) {
+      el.scrollTop = el.scrollHeight;
+    } else if (isActiveStream || activeStreamContent) {
+      setHasNewBelow(true);
     }
-  }, [messages.length, activeStreamContent, isActiveStream, showOptimistic]);
+  }, [messages.length, activeStreamContent, streamingReasoning, isActiveStream, showOptimistic]);
+
+  useEffect(() => { updateActivePrompt(); }, [updateActivePrompt]);
+  useEffect(() => () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); }, []);
+
+  // Once the saved reply has taken its place, the streamed copy is done with.
+  // A failed turn keeps its prompt for the error banner's retry.
+  useEffect(() => {
+    if (!isActiveStream && streamEndedAt !== null && !handingOver && !streamError) {
+      resetStreamingContent();
+      clearOptimisticMessage();
+    }
+  }, [isActiveStream, streamEndedAt, handingOver, streamError, resetStreamingContent, clearOptimisticMessage]);
 
   const isEmpty = messages.length === 0 && !isActiveStream && !isLoading && !showOptimistic;
 
@@ -126,70 +249,99 @@ export function ChatThread() {
         </div>
       )}
 
-      {/* Messages */}
-      <div className={`relative flex-1 ${isEmpty ? "overflow-hidden" : "overflow-y-auto"}`}
-        ref={scrollRef}
-        onScroll={handleScroll}
-      >
-        {isEmpty ? (
-          <EmptyState onPick={(t) => send(t, selectedRepoId ?? undefined, "auto")} />
-        ) : (
-          <div className="mx-auto max-w-[768px] px-6 py-8">
-            <div className="flex flex-col gap-7">
-              {messages.map((m, i) =>
-                <MessageBubble
-                  key={m.id}
-                  message={m}
-                  onRetry={m.role === "user" && i === lastUnansweredUserIdx && !isActiveStream
-                    ? (id, content) => handleRetry(id, content)
-                    : undefined}
-                  onEdit={m.role === "user" && !isActiveStream
-                    ? (id, newContent) => handleEdit(id, newContent)
-                    : undefined}
-                  onDelete={m.role === "user" && !isActiveStream ? (id) => deleteMessage(id) : undefined}
-                  isLastUserWithoutReply={m.role === "user" && i === lastUnansweredUserIdx && !isActiveStream}
-                />
-              )}
+      {/* Message area. The navigator overlays exactly this region, so it can
+          never run under the header above or the composer below. */}
+      <div className="relative min-h-0 flex-1">
+        <div
+          className={`absolute inset-0 ${isEmpty ? "overflow-hidden" : "overflow-y-auto"}`}
+          ref={scrollRef}
+          onScroll={handleScroll}
+          onWheel={handleWheel}
+          onTouchMove={handleTouchMove}
+        >
+          {isEmpty ? (
+            <EmptyState onStart={startFromCard} />
+          ) : isLoading && messages.length === 0 && !showOptimistic ? (
+            <div className="mx-auto max-w-[768px] px-6 py-8">
+              <ChatMessagesSkeleton />
+            </div>
+          ) : (
+            <div className="mx-auto max-w-[768px] px-6 py-8">
+              <div className="flex flex-col gap-7">
+                {messages.map((m, i) => (
+                  <div
+                    key={m.id}
+                    data-msg-id={m.id}
+                    className="-mx-3 rounded-2xl px-3 py-1 transition-[box-shadow,background-color] duration-700 ease-out"
+                    style={flashId === m.id ? {
+                      background: "var(--accent-subtle)",
+                      boxShadow: "0 0 0 1px var(--accent-border), 0 0 28px rgba(99,102,241,0.18)",
+                    } : undefined}
+                  >
+                    <MessageBubble
+                      message={m}
+                      onRetry={m.role === "user" && i === lastUnansweredUserIdx && !isActiveStream
+                        ? (id, content) => handleRetry(id, content)
+                        : undefined}
+                      onEdit={m.role === "user" && !isActiveStream
+                        ? (id, newContent, keep) => handleEdit(id, newContent, keep)
+                        : undefined}
+                      onDelete={m.role === "user" && !isActiveStream ? (id) => deleteMessage(id) : undefined}
+                      isLastUserWithoutReply={m.role === "user" && i === lastUnansweredUserIdx && !isActiveStream}
+                      isLast={i === messages.length - 1 && !isActiveStream}
+                      onClarifySubmit={(text) => {
+                        scrollToBottom("smooth");
+                        send(text, selectedRepoId ?? undefined, useChatStore.getState().agentMode);
+                      }}
+                    />
+                  </div>
+                ))}
 
-              {showOptimistic &&
-                !messages.find((m) => m.content === optimisticUserMessage!.content && m.role === "user") && (
-                  <MessageBubble key={optimisticUserMessage!.id} message={optimisticUserMessage!} />
+                {showOptimistic &&
+                  !messages.find((m) => m.content === optimisticUserMessage!.content && m.role === "user") && (
+                    <MessageBubble key={optimisticUserMessage!.id} message={optimisticUserMessage!} />
+                  )}
+
+                {(isActiveStream || handingOver) && (
+                  <StreamingMessageBubble content={activeStreamContent} activeToolCall={activeToolCall} reasoning={isActiveStream ? streamingReasoning : ""} fileStage={isActiveStream ? streamingFileStage : null} file={streamingConversationId === activeConversationId ? streamingFile : null} />
                 )}
 
-              {(isActiveStream || activeStreamContent) && (
-                <StreamingMessageBubble content={activeStreamContent} activeToolCall={activeToolCall} />
-              )}
-
-              {showStreamError && (
-                <div
-                  className="flex items-center justify-between gap-3 rounded-xl px-4 py-3 text-[13px] animate-fade-in-up"
-                  style={{
-                    background: "var(--danger-bg)",
-                    border: "1px solid var(--danger-border)",
-                    color: "var(--danger)",
-                  }}
-                >
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <AlertCircle className="size-4 shrink-0" />
-                    <span className="truncate">{streamError}</span>
+                {showStreamError && (
+                  <div
+                    className="flex items-center justify-between gap-3 rounded-xl px-4 py-3 text-[13px] animate-fade-in-up"
+                    style={{
+                      background: "var(--danger-bg)",
+                      border: "1px solid var(--danger-border)",
+                      color: "var(--danger)",
+                    }}
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <AlertCircle className="size-4 shrink-0" />
+                      <span className="truncate">{streamError}</span>
+                    </div>
+                    {lastUserMessage && (
+                      <button
+                        onClick={() => {
+                          const lastMsg = [...messages].reverse().find((m) => m.role === "user");
+                          if (lastMsg) handleRetry(lastMsg.id, lastMsg.content);
+                        }}
+                        className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-opacity hover:opacity-80"
+                        style={{ background: "var(--danger-border)", color: "var(--danger)" }}
+                      >
+                        <RotateCcw className="size-3" /> Retry
+                      </button>
+                    )}
                   </div>
-                  {lastUserMessage && (
-                    <button
-                      onClick={() => {
-                        const lastMsg = [...messages].reverse().find((m) => m.role === "user");
-                        if (lastMsg) handleRetry(lastMsg.id, lastMsg.content);
-                      }}
-                      className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-opacity hover:opacity-80"
-                      style={{ background: "var(--danger-border)", color: "var(--danger)" }}
-                    >
-                      <RotateCcw className="size-3" /> Retry
-                    </button>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
+              <div className="h-4" />
             </div>
-            <div ref={bottomRef} className="h-4" />
-          </div>
+          )}
+        </div>
+
+        {/* Prompt navigator — right edge of the message area */}
+        {!isEmpty && (
+          <PromptNavigator prompts={prompts} activeId={activePromptId} onJump={jumpToPrompt} />
         )}
       </div>
 
@@ -198,9 +350,20 @@ export function ChatThread() {
         className="px-6 pb-5 pt-3"
         style={{ background: "linear-gradient(to top, var(--canvas) 60%, transparent)" }}
       >
-        <div className="mx-auto max-w-[768px]">
+        <div className="relative mx-auto max-w-[768px]">
+          {!isEmpty && (
+            <ScrollToBottomButton
+              visible={!atBottom}
+              hasNew={hasNewBelow}
+              onClick={() => scrollToBottom("smooth")}
+            />
+          )}
           <ChatInput
-            onSend={(msg, files, agentId) => send(msg, selectedRepoId ?? undefined, agentId ?? "auto", files)}
+            onSend={(msg, files, agentId) => {
+              // Sending is a clear signal you want to see what comes next.
+              scrollToBottom("smooth");
+              send(msg, selectedRepoId ?? undefined, agentId ?? "auto", files);
+            }}
             onStop={stop}
             isStreaming={isActiveStream}
           />
@@ -221,7 +384,7 @@ function greeting(): string {
   return "Good evening";
 }
 
-function EmptyState({ onPick }: { onPick: (t: string) => void }) {
+function EmptyState({ onStart }: { onStart: (start: QuickStart) => void }) {
   const user = useAuthStore((s) => s.user);
   const firstName = user?.full_name?.split(" ")[0];
 
@@ -270,13 +433,14 @@ function EmptyState({ onPick }: { onPick: (t: string) => void }) {
             className="mt-3 max-w-[420px] text-[14px] leading-relaxed"
             style={{ color: "var(--text-tertiary)" }}
           >
-            Ask me anything about your codebase — I read files, search semantically, and check git history.
+            Ask anything — or bring a document, a spreadsheet or your code, and I&apos;ll answer from it,
+            analyse it, or turn it into a file.
           </p>
         </div>
 
         {/* Quick actions */}
         <div className="animate-fade-up" style={{ animationDelay: "80ms" }}>
-          <QuickActions onPick={onPick} />
+          <QuickActions onPick={onStart} />
         </div>
       </div>
     </div>
