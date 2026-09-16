@@ -6,8 +6,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import { toast } from "sonner";
 import {
-  ArrowRight, Clock, Download, Eye, FileText, Loader2, MessageSquare, MoreHorizontal,
-  Sparkles, Star, Trash2, Upload,
+  ArrowRight, Clock, Download, Eye, FileText, Loader2, Menu, MessageSquare, MoreHorizontal,
+  PanelRight, Sparkles, Star, Trash2, Upload,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
 } from "@/lib/hooks/use-workspace";
 import { useOperationsStore } from "@/lib/stores/operations-store";
 import { useUploadConfirmStore } from "@/lib/stores/upload-confirm-store";
+import { useUIStore } from "@/lib/stores/ui-store";
 import { useViewerStore } from "@/lib/stores/viewer-store";
 import type { Workspace, WorkspaceArtifact, WorkspaceDocument } from "@/types/workspace";
 
@@ -42,6 +43,9 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
   const router = useRouter();
   const params = useSearchParams();
   const qc = useQueryClient();
+  // Both columns fold away on a small screen; these are the ways back to them.
+  const setNavOpen = useUIStore((s) => s.setWorkspaceNavOpen);
+  const setContextOpen = useUIStore((s) => s.setWorkspaceContextOpen);
   const tab = (params.get("tab") as Tab) ?? "overview";
   const wsId = workspace.id;
 
@@ -161,20 +165,39 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       {/* Header */}
-      <div className="px-8 pb-3 pt-6">
-        <h1 className="text-[22px] font-semibold" style={{ color: "var(--text-primary)", letterSpacing: "-0.03em" }}>
-          {workspace.name}
-        </h1>
-        {workspace.description && (
-          <p className="mt-0.5 text-[13px]" style={{ color: "var(--text-muted)" }}>{workspace.description}</p>
-        )}
+      <div className="px-4 pb-3 pt-4 sm:px-8 sm:pt-6">
+        <div className="flex items-start gap-2">
+          <button
+            onClick={() => setNavOpen(true)}
+            aria-label="Open workspace menu"
+            className="icon-btn -ml-1 size-9 shrink-0 rounded-lg md:hidden"
+          >
+            <Menu className="size-[18px]" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-[19px] font-semibold sm:text-[22px]" style={{ color: "var(--text-primary)", letterSpacing: "-0.03em" }}>
+              {workspace.name}
+            </h1>
+            {workspace.description && (
+              <p className="mt-0.5 truncate text-[13px]" style={{ color: "var(--text-muted)" }}>{workspace.description}</p>
+            )}
+          </div>
+          <button
+            onClick={() => setContextOpen(true)}
+            aria-label="Open workspace context"
+            className="icon-btn size-9 shrink-0 rounded-lg lg:hidden"
+          >
+            <PanelRight className="size-[18px]" />
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 px-8" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+      {/* Five tabs do not fit a phone; they scroll rather than wrap or shrink. */}
+      <div className="flex items-center gap-1 overflow-x-auto px-4 sm:px-8" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
         {TABS.map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className="relative px-3 py-2.5 text-[13px] font-medium capitalize transition-colors"
+            className="relative shrink-0 px-3 py-2.5 text-[13px] font-medium capitalize transition-colors"
             style={{ color: tab === t ? "var(--text-primary)" : "var(--text-muted)" }}>
             {t}
             {tab === t && (
@@ -184,7 +207,7 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-8 sm:py-6">
         {isLoading && tab === "overview" && <DashboardSkeleton />}
 
         {tab === "overview" && dashboard && (

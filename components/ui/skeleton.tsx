@@ -128,7 +128,7 @@ export function PageSkeleton() {
           <Skeleton className="mt-2 h-3.5 w-72" />
         </div>
       </div>
-      <div className="px-8 py-6">
+      <div className="px-4 py-5 sm:px-8 sm:py-6">
         <div className="mx-auto max-w-3xl space-y-4">
           {[88, 150, 110].map((h, i) => (
             <Skeleton key={i} className="w-full rounded-xl" style={{ height: h }} />
@@ -311,7 +311,7 @@ export function WorkspaceSkeleton() {
         <Skeleton className="mt-3 h-3 w-16" />
         {[80, 64, 72, 56, 68].map((w, i) => <Skeleton key={i} className="h-4" style={{ width: `${w}%` }} />)}
       </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-5 px-8 py-7">
+      <div className="flex min-w-0 flex-1 flex-col gap-5 px-4 py-5 sm:px-8 sm:py-7">
         <Skeleton className="h-6 w-56" />
         <Skeleton className="h-3.5 w-80" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -335,9 +335,11 @@ export function WorkspaceSkeleton() {
 /** The whole app while the session is restored: sidebar and an empty page. */
 export function AppShellSkeleton() {
   return (
-    <Loading label="Loading UnityWorks" className="flex h-screen" style={{ background: "var(--canvas)" }}>
+    <Loading label="Loading UnityWorks" className="flex h-dvh" style={{ background: "var(--canvas)" }}>
       <div
-        className="flex w-[260px] shrink-0 flex-col gap-2 px-3 py-3"
+        // Gated like the real sidebar it stands in for — otherwise the first
+        // paint on a phone shows a 260px column the loaded app doesn't have.
+        className="hidden w-[260px] shrink-0 flex-col gap-2 px-3 py-3 md:flex"
         style={{ background: "var(--sidebar-bg)", borderRight: "1px solid var(--border-subtle)" }}
       >
         <div className="mb-2 flex items-center gap-2.5 px-1 py-1">

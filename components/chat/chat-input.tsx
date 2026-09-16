@@ -390,7 +390,7 @@ export function ChatInput({
           "Ask me anything — coding, history, business, pop culture…"
         }
         rows={1}
-        className="w-full resize-none bg-transparent px-5 pt-4 pb-2 text-[14px] leading-relaxed focus:outline-none disabled:opacity-40"
+        className="composer-input w-full resize-none bg-transparent px-5 pt-4 pb-2 leading-relaxed focus:outline-none disabled:opacity-40"
         style={{
           color: "var(--text-primary)",
           maxHeight: "200px",
@@ -402,8 +402,9 @@ export function ChatInput({
       {/* Bottom toolbar */}
       <div className="flex items-center justify-between px-3 pb-3 pt-1">
 
-        {/* Left — attach + agent + repo (code mode) */}
-        <div className="flex items-center gap-1">
+        {/* Left — attach + agent + repo (code mode).
+            min-w-0 lets this cluster shrink instead of pushing send off-screen. */}
+        <div className="flex min-w-0 items-center gap-1">
 
           {/* Attach dropdown */}
           <div ref={attachRef} className="relative">
@@ -457,7 +458,8 @@ export function ChatInput({
                 className="size-1.5 rounded-full"
                 style={{ background: selectedAgent.dot, boxShadow: `0 0 4px ${selectedAgent.dot}` }}
               />
-              {selectedAgent.label}
+              {/* The coloured dot identifies the mode when the word won't fit. */}
+              <span className="hidden sm:inline">{selectedAgent.label}</span>
               <ChevronDown
                 className="size-3 transition-transform duration-150"
                 style={{ transform: agentOpen ? "rotate(180deg)" : "rotate(0deg)" }}
@@ -528,7 +530,7 @@ export function ChatInput({
                 aria-label={label}
               >
                 <Brain className="size-3.5" />
-                {label}
+                <span className="hidden sm:inline">{label}</span>
               </button>
             );
           })()}
@@ -542,8 +544,8 @@ export function ChatInput({
           )}
         </div>
 
-        {/* Right — send / stop */}
-        <div className="flex items-center gap-2">
+        {/* Right — send / stop. Never shrinks: sending is the point. */}
+        <div className="flex shrink-0 items-center gap-2">
           {isStreaming ? (
             <button
               onClick={onStop}

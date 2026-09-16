@@ -95,11 +95,11 @@ export function WorkspaceHero({
   const firstName = user?.full_name?.split(" ")[0];
 
   return (
-    <div className="flex h-full flex-col items-center justify-center px-6">
+    <div className="flex h-full flex-col items-center justify-center px-4 sm:px-6">
       <div className="w-full max-w-[640px]">
         {/* Hero */}
-        <div className="mb-10 flex flex-col items-center text-center animate-fade-up">
-          <div className="relative mb-7">
+        <div className="mb-7 flex flex-col items-center text-center animate-fade-up sm:mb-10">
+          <div className="relative mb-5 sm:mb-7">
             <div
               className="absolute inset-0 rounded-3xl blur-2xl"
               style={{
@@ -109,7 +109,7 @@ export function WorkspaceHero({
               }}
             />
             <div
-              className="relative flex h-[64px] w-[64px] items-center justify-center rounded-[20px]"
+              className="relative flex size-[52px] items-center justify-center rounded-[20px] sm:size-[64px]"
               style={{
                 background: "var(--accent-gradient)",
                 boxShadow:
@@ -132,13 +132,13 @@ export function WorkspaceHero({
           </div>
 
           <h1
-            className="text-[30px] font-semibold"
+            className="text-[23px] font-semibold sm:text-[30px]"
             style={{ color: "var(--text-primary)", letterSpacing: "-0.035em", lineHeight: 1.15 }}
           >
             {firstName ? `${greeting()}, ${firstName}` : greeting()}
           </h1>
           <p
-            className="mt-3 max-w-[440px] text-[14px] leading-relaxed"
+            className="mt-3 max-w-[440px] text-[13px] leading-relaxed sm:text-[14px]"
             style={{ color: "var(--text-tertiary)" }}
           >
             {documentCount > 0

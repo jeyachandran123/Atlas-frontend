@@ -219,7 +219,7 @@ export default function LibraryPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-2">
+        <div className="mx-auto w-full max-w-6xl px-4 pb-12 pt-2 sm:px-6">
           {isLoading ? (
             <LibraryGridSkeleton />
           ) : isError ? (

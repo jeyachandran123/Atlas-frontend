@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import { MobileNavDrawer, MobileTopBar } from "@/components/layout/mobile-nav";
 import { RouteTransition } from "@/components/layout/route-transition";
 import { AppShellSkeleton } from "@/components/ui/skeleton";
 import { CommandPalette } from "@/components/command/command-palette";
@@ -60,12 +61,19 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // page beside it. Folding the sidebar (Ctrl+\) leaves its icon strip.
   return (
     <SessionGate status={status}>
-      <div className="relative flex h-screen bg-canvas">
+      {/* h-dvh, not h-screen: on a phone the address bar shrinks the visible
+          viewport, and 100vh would push the composer below the fold. */}
+      <div className="relative flex h-dvh bg-canvas">
         <CommandPalette />
         <AppSidebar />
-        <main className="flex-1 overflow-hidden">
-          <RouteTransition>{children}</RouteTransition>
-        </main>
+        <MobileNavDrawer />
+        {/* The page column: a top bar on phones, the page itself everywhere. */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <MobileTopBar />
+          <main className="min-h-0 flex-1 overflow-hidden">
+            <RouteTransition>{children}</RouteTransition>
+          </main>
+        </div>
         {/* One file viewer for the whole app: chat, Library, workspaces. */}
         <DocumentViewer />
       </div>

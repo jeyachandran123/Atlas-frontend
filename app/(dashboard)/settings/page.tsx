@@ -45,7 +45,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-5 sm:px-8 sm:py-6">
         <div className="mx-auto max-w-2xl space-y-4">
           {/* Account */}
           {!user ? (

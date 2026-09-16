@@ -228,7 +228,7 @@ export function ChatThread() {
       {/* Conversation header */}
       {!isEmpty && (
         <div
-          className="glass sticky top-0 z-10 flex h-12 shrink-0 items-center justify-between gap-4 px-5"
+          className="glass sticky top-0 z-10 flex h-12 shrink-0 items-center justify-between gap-3 px-3 sm:gap-4 sm:px-5"
           style={{ borderBottom: "1px solid var(--border-subtle)" }}
         >
           <p
@@ -244,7 +244,8 @@ export function ChatThread() {
             style={copied ? { color: "var(--success)" } : undefined}
           >
             {copied ? <Check className="size-3.5" /> : <Share2 className="size-3.5" />}
-            {copied ? "Copied" : "Share"}
+            {/* The icon carries the meaning when there is no room for the word. */}
+            <span className="hidden sm:inline">{copied ? "Copied" : "Share"}</span>
           </button>
         </div>
       )}
@@ -262,11 +263,11 @@ export function ChatThread() {
           {isEmpty ? (
             <EmptyState onStart={startFromCard} />
           ) : isLoading && messages.length === 0 && !showOptimistic ? (
-            <div className="mx-auto max-w-[768px] px-6 py-8">
+            <div className="mx-auto max-w-[768px] px-4 py-6 sm:px-6 sm:py-8">
               <ChatMessagesSkeleton />
             </div>
           ) : (
-            <div className="mx-auto max-w-[768px] px-6 py-8">
+            <div className="mx-auto max-w-[768px] px-4 py-6 sm:px-6 sm:py-8">
               <div className="flex flex-col gap-7">
                 {messages.map((m, i) => (
                   <div
@@ -346,8 +347,11 @@ export function ChatThread() {
       </div>
 
       {/* Input */}
+      {/* The composer sits against the bottom of the viewport, so on a phone its
+          padding has to clear the home indicator — env() resolves to 0 anywhere
+          that has no inset, which is why max() is safe on every device. */}
       <div
-        className="px-6 pb-5 pt-3"
+        className="px-3 pt-3 pb-[max(14px,env(safe-area-inset-bottom))] sm:px-6 sm:pb-5"
         style={{ background: "linear-gradient(to top, var(--canvas) 60%, transparent)" }}
       >
         <div className="relative mx-auto max-w-[768px]">
@@ -389,13 +393,13 @@ function EmptyState({ onStart }: { onStart: (start: QuickStart) => void }) {
   const firstName = user?.full_name?.split(" ")[0];
 
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
+    <div className="absolute inset-0 flex flex-col items-center justify-center px-4 sm:px-6">
       <div className="mt-8 w-full max-w-[640px]">
 
         {/* Hero */}
-        <div className="mb-10 flex flex-col items-center text-center animate-fade-up">
+        <div className="mb-7 flex flex-col items-center text-center animate-fade-up sm:mb-10">
           {/* Logo */}
-          <div className="relative mb-7">
+          <div className="relative mb-5 sm:mb-7">
             <div
               className="absolute inset-0 rounded-3xl blur-2xl"
               style={{
@@ -405,7 +409,7 @@ function EmptyState({ onStart }: { onStart: (start: QuickStart) => void }) {
               }}
             />
             <div
-              className="relative flex h-[64px] w-[64px] items-center justify-center rounded-[20px]"
+              className="relative flex size-[52px] items-center justify-center rounded-[20px] sm:size-[64px]"
               style={{
                 background: "var(--accent-gradient)",
                 boxShadow: "0 0 0 1px var(--accent-border), 0 12px 40px rgba(99,102,241,0.35), inset 0 1px 0 rgba(255,255,255,0.18)",
@@ -424,13 +428,13 @@ function EmptyState({ onStart }: { onStart: (start: QuickStart) => void }) {
           </div>
 
           <h1
-            className="text-[30px] font-semibold"
+            className="text-[23px] font-semibold sm:text-[30px]"
             style={{ color: "var(--text-primary)", letterSpacing: "-0.035em", lineHeight: 1.15 }}
           >
             {firstName ? `${greeting()}, ${firstName}` : greeting()}
           </h1>
           <p
-            className="mt-3 max-w-[420px] text-[14px] leading-relaxed"
+            className="mt-3 max-w-[420px] text-[13px] leading-relaxed sm:text-[14px]"
             style={{ color: "var(--text-tertiary)" }}
           >
             Ask anything — or bring a document, a spreadsheet or your code, and I&apos;ll answer from it,

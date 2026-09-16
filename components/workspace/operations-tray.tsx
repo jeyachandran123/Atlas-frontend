@@ -69,7 +69,9 @@ export function OperationsTray() {
   if (operations.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[110] flex w-[320px] flex-col gap-2">
+    // On a phone it spans the width rather than hugging a corner it would
+    // otherwise share with the composer.
+    <div className="fixed inset-x-3 bottom-3 z-[110] flex flex-col gap-2 sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-[320px]">
       {operations.map((op) => (
         <OperationCard key={op.id} op={op} onDismiss={() => remove(op.id)} />
       ))}

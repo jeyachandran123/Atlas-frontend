@@ -21,7 +21,12 @@ function relTime(iso: string): string {
   return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
 }
 
-export function WorkspaceContextPanel({ workspace }: { workspace: Workspace }) {
+/**
+ * What the workspace knows right now: its summary, documents, artifacts and
+ * activity — or, inside a conversation, the retrieval control itself. Rendered
+ * in the column from `lg` up and in a bottom sheet below it.
+ */
+export function WorkspaceContextContent({ workspace }: { workspace: Workspace }) {
   const pathname = usePathname();
   const wsId = workspace.id;
   const { data: dashboard } = useWorkspaceDashboard(wsId);
@@ -47,10 +52,7 @@ export function WorkspaceContextPanel({ workspace }: { workspace: Workspace }) {
   }
 
   return (
-    <aside
-      className="hidden w-[280px] shrink-0 flex-col overflow-y-auto lg:flex"
-      style={{ borderLeft: "1px solid var(--border-subtle)", background: "var(--sidebar-bg)" }}
-    >
+    <>
       {/* In a conversation, the retrieval control center replaces the plain
           document list — it IS the knowledge-context control (Objective 5). */}
       {conversationId ? (
@@ -137,6 +139,18 @@ export function WorkspaceContextPanel({ workspace }: { workspace: Workspace }) {
           </div>
         </Section>
       )}
+    </>
+  );
+}
+
+/** The context column — from `lg` up. Below that it opens as a bottom sheet. */
+export function WorkspaceContextPanel({ workspace }: { workspace: Workspace }) {
+  return (
+    <aside
+      className="hidden w-[280px] shrink-0 flex-col overflow-y-auto lg:flex"
+      style={{ borderLeft: "1px solid var(--border-subtle)", background: "var(--sidebar-bg)" }}
+    >
+      <WorkspaceContextContent workspace={workspace} />
     </aside>
   );
 }

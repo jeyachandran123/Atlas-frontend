@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { QueryProvider } from "@/app/providers";
@@ -21,6 +21,21 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "UnityWorks — AI Assistant",
   description: "A self-hosted AI assistant grounded in your codebase.",
+};
+
+/**
+ * Without this a phone lays the page out at ~980px and scales the result down,
+ * which is why the app read as tiny rather than merely cramped on a small
+ * screen. `viewportFit: cover` is what lets the layout below claim the area
+ * behind a notch and the iOS home indicator via env(safe-area-inset-*).
+ *
+ * No `maximumScale` on purpose: capping zoom would stop anyone who needs to
+ * magnify text from doing so.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

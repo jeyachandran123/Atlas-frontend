@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { WorkspaceSkeleton } from "@/components/ui/skeleton";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
 import { WorkspaceContextPanel } from "@/components/workspace/workspace-context-panel";
+import { WorkspaceContextSheet, WorkspaceNavDrawer } from "@/components/workspace/workspace-mobile";
 import { OperationsTray } from "@/components/workspace/operations-tray";
 import { UploadConfirmDialog } from "@/components/workspace/upload-confirm-dialog";
 import { useWorkspaces } from "@/lib/hooks/use-workspace";
@@ -41,6 +42,9 @@ export function WorkspaceShell({
       <WorkspaceSidebar workspace={workspace} />
       <main className="flex min-w-0 flex-1 flex-col">{children}</main>
       <WorkspaceContextPanel workspace={workspace} />
+      {/* The same two columns, reachable on a screen too narrow to hold them. */}
+      <WorkspaceNavDrawer workspace={workspace} />
+      <WorkspaceContextSheet workspace={workspace} />
       {/* One operations tray for the whole workspace — mounted at the shell so
           it survives page navigation within the workspace. The document viewer
           is mounted once for the whole app, in the dashboard layout. */}

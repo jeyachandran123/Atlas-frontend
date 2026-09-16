@@ -203,7 +203,7 @@ export function WorkspaceComposer({
               ? `Describe the ${formatLabel(format)} to generate…`
               : "Ask about your documents — or just say hello…"
           }
-          className="max-h-[200px] w-full resize-none bg-transparent text-[14.5px] leading-relaxed outline-none placeholder:opacity-60"
+          className="composer-input max-h-[200px] w-full resize-none bg-transparent leading-relaxed outline-none placeholder:opacity-60"
           style={{ color: "var(--text-primary)" }}
         />
       </div>
@@ -235,7 +235,7 @@ export function WorkspaceComposer({
             color: genMode ? "var(--accent-bright)" : "var(--text-secondary)",
           }}
         >
-          <Sparkles className="size-3.5" /> Generate
+          <Sparkles className="size-3.5" /> <span className="hidden sm:inline">Generate</span>
         </button>
 
         {genMode && (

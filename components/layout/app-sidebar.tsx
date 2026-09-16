@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   BookOpenText, Check, ChevronsUpDown, FolderGit2, KeyRound, Library, LogOut, Monitor, Moon,
-  PanelLeftClose, PanelLeftOpen, Search, SearchCode, Settings, SquarePen, Sun,
+  PanelLeftClose, PanelLeftOpen, Search, SearchCode, Settings, SquarePen, Sun, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
@@ -41,9 +41,22 @@ const COLLAPSED_WIDTH = "60px";
  * The one sidebar, on every page: the brand, the spaces, the chats, and the
  * account — the way ChatGPT lays it out. Folded, it keeps only the icons, so
  * every space stays one click away. Ctrl+\ folds it; Ctrl+K searches.
+ *
+ * Rendered in two places: inside <AppSidebar>'s column from `md` up, and
+ * inside <MobileNavDrawer> below it. One implementation, so a space added
+ * here shows up in both and the two can never drift apart.
  */
-export function AppSidebar() {
-  const collapsed = useUIStore((s) => s.sidebarCollapsed);
+export function SidebarContent({
+  variant = "sidebar",
+  collapsed = false,
+  onClose,
+}: {
+  variant?: "sidebar" | "drawer";
+  /** Folded to the icon strip. Only ever true in the sidebar. */
+  collapsed?: boolean;
+  /** Dismisses the drawer; the sidebar ignores it. */
+  onClose?: () => void;
+}) {
   const toggle = useUIStore((s) => s.toggleSidebar);
   const setPaletteOpen = useUIStore((s) => s.setPaletteOpen);
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
@@ -67,17 +80,8 @@ export function AppSidebar() {
   const isActive = (match: string[]) => match.some((p) => here === p || here.startsWith(`${p}/`));
 
   return (
-    <TooltipProvider>
-      <nav
-        aria-label="Sidebar"
-        className="flex shrink-0 flex-col overflow-hidden transition-[width] duration-200 ease-out"
-        style={{
-          width: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH,
-          background: "var(--sidebar-bg)",
-          borderRight: "1px solid var(--border-subtle)",
-        }}
-      >
-        {/* ── Header ─────────────────────────────────────────────────── */}
+    <>
+      {/* ── Header ─────────────────────────────────────────────────── */}
         {collapsed ? (
           <div className="flex justify-center pb-2 pt-3">
             <Tooltip content="Open sidebar" side="right">
@@ -112,11 +116,17 @@ export function AppSidebar() {
                 <Search className="size-[17px]" />
               </button>
             </Tooltip>
-            <Tooltip content="Close sidebar  ·  Ctrl \" side="bottom">
-              <button onClick={toggle} aria-label="Close sidebar" className="icon-btn size-8">
-                <PanelLeftClose className="size-[17px]" />
+            {variant === "drawer" ? (
+              <button onClick={onClose} aria-label="Close menu" className="icon-btn size-8">
+                <X className="size-[18px]" />
               </button>
-            </Tooltip>
+            ) : (
+              <Tooltip content="Close sidebar  ·  Ctrl \" side="bottom">
+                <button onClick={toggle} aria-label="Close sidebar" className="icon-btn size-8">
+                  <PanelLeftClose className="size-[17px]" />
+                </button>
+              </Tooltip>
+            )}
           </div>
         )}
 
@@ -153,7 +163,30 @@ export function AppSidebar() {
         <div className="p-2" style={{ borderTop: "1px solid var(--border-subtle)" }}>
           <AccountMenu collapsed={collapsed} onLogout={() => setConfirmLogout(true)} />
         </div>
-        <LogoutDialog open={confirmLogout} onOpenChange={setConfirmLogout} />
+      <LogoutDialog open={confirmLogout} onOpenChange={setConfirmLogout} />
+    </>
+  );
+}
+
+/**
+ * The sidebar column — from `md` up only. Below that there is no room for
+ * 260px beside the page, and <MobileNavDrawer> carries the same content.
+ */
+export function AppSidebar() {
+  const collapsed = useUIStore((s) => s.sidebarCollapsed);
+
+  return (
+    <TooltipProvider>
+      <nav
+        aria-label="Sidebar"
+        className="hidden shrink-0 flex-col overflow-hidden transition-[width] duration-200 ease-out md:flex"
+        style={{
+          width: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH,
+          background: "var(--sidebar-bg)",
+          borderRight: "1px solid var(--border-subtle)",
+        }}
+      >
+        <SidebarContent collapsed={collapsed} />
       </nav>
     </TooltipProvider>
   );

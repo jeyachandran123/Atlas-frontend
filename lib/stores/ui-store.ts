@@ -7,11 +7,20 @@ interface UIState {
   citationsPanelOpen: boolean;
   /** The Ctrl+K palette — opened by the shortcut or the sidebar's search button. Not persisted. */
   paletteOpen: boolean;
+  /** The sidebar as a drawer, below `md`, where it cannot sit beside the page. Not persisted. */
+  mobileNavOpen: boolean;
+  /** The workspace's own nav as a drawer, below `md`. Not persisted. */
+  workspaceNavOpen: boolean;
+  /** The workspace context panel as a bottom sheet, below `lg`. Not persisted. */
+  workspaceContextOpen: boolean;
   /** The page a click is heading to — shown as its skeleton until it arrives. Not persisted. */
   pendingHref: string | null;
   toggleSidebar: () => void;
   setCitationsPanelOpen: (open: boolean) => void;
   setPaletteOpen: (open: boolean | ((open: boolean) => boolean)) => void;
+  setMobileNavOpen: (open: boolean) => void;
+  setWorkspaceNavOpen: (open: boolean) => void;
+  setWorkspaceContextOpen: (open: boolean) => void;
   setPendingHref: (href: string | null) => void;
 }
 
@@ -24,10 +33,16 @@ export const useUIStore = create<UIState>()(
       sidebarCollapsed: false,
       citationsPanelOpen: true,
       paletteOpen: false,
+      mobileNavOpen: false,
+      workspaceNavOpen: false,
+      workspaceContextOpen: false,
       pendingHref: null,
       setPendingHref: (href) => set({ pendingHref: href }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setCitationsPanelOpen: (open) => set({ citationsPanelOpen: open }),
+      setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
+      setWorkspaceNavOpen: (open) => set({ workspaceNavOpen: open }),
+      setWorkspaceContextOpen: (open) => set({ workspaceContextOpen: open }),
       setPaletteOpen: (open) =>
         set((s) => ({ paletteOpen: typeof open === "function" ? open(s.paletteOpen) : open })),
     }),

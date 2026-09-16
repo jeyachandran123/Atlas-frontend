@@ -122,7 +122,7 @@ function ViewerModal({ resource, onClose }: { resource: ViewerResource; onClose:
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 z-[120] flex items-center justify-center p-2 animate-fade-in sm:p-4"
       style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}
       onClick={onClose}
     >
@@ -133,19 +133,23 @@ function ViewerModal({ resource, onClose }: { resource: ViewerResource; onClose:
           border: "1px solid var(--border-strong)",
           boxShadow: "var(--shadow-xl)",
           maxWidth: fullscreen ? "100%" : "min(1180px, 100%)",
-          height: fullscreen ? "100%" : "min(88vh, 100%)",
+          // dvh, not vh: on a phone the address bar shrinks the visible
+          // viewport, and 88vh would put the footer under it.
+          height: fullscreen ? "100%" : "min(88dvh, 100%)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+        <div className="flex items-center gap-1 px-2 py-2 sm:gap-2 sm:px-4 sm:py-2.5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
           <HeaderIcon className="size-4 shrink-0" style={{ color: kind === "sheet" ? "#34d399" : "var(--text-muted)" }} />
           <span className="min-w-0 flex-1 truncate text-[13px] font-medium" style={{ color: "var(--text-primary)" }}
             title={resource.filename}>
             {resource.title || resource.filename}
           </span>
+          {/* Zooming is a pointer affordance; a phone pinch-zooms the content
+              itself, so these only take room the filename needs. */}
           {canZoom && (
-            <div className="flex items-center gap-0.5">
+            <div className="hidden items-center gap-0.5 sm:flex">
               <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))} aria-label="Zoom out"
                 className="rounded-md p-1.5 hover:bg-[var(--surface-3)]" style={{ color: "var(--text-secondary)" }}>
                 <Minus className="size-3.5" />
@@ -163,7 +167,9 @@ function ViewerModal({ resource, onClose }: { resource: ViewerResource; onClose:
             className="rounded-md p-1.5 hover:bg-[var(--surface-3)]" style={{ color: "var(--text-secondary)" }}>
             {fullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
           </button>
-          <Button size="sm" variant="ghost" onClick={download}><Download /> Download</Button>
+          <Button size="sm" variant="ghost" onClick={download} aria-label="Download">
+            <Download /> <span className="hidden sm:inline">Download</span>
+          </Button>
           <button onClick={onClose} aria-label="Close viewer"
             className="rounded-md p-1.5 hover:bg-[var(--surface-3)]" style={{ color: "var(--text-secondary)" }}>
             <X className="size-4" />
@@ -181,7 +187,7 @@ function ViewerModal({ resource, onClose }: { resource: ViewerResource; onClose:
             </div>
           )}
           {error && !loading && (
-            <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
+            <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center sm:px-6">
               <p className="text-[13px]" style={{ color: "var(--status-error)" }}>{error}</p>
               <Button size="sm" variant="outline" onClick={download}><Download /> Download instead</Button>
             </div>
@@ -213,10 +219,10 @@ function ViewerModal({ resource, onClose }: { resource: ViewerResource; onClose:
                 </div>
               )}
               {kind === "markdown" && text != null && (
-                <div className="mx-auto max-w-3xl px-8 py-6"><MessageMarkdown content={text} /></div>
+                <div className="mx-auto max-w-3xl px-4 py-5 sm:px-8 sm:py-6"><MessageMarkdown content={text} /></div>
               )}
               {kind === "text" && text != null && (
-                <pre className="whitespace-pre-wrap px-8 py-6 text-[12.5px] leading-relaxed"
+                <pre className="whitespace-pre-wrap px-4 py-5 text-[12.5px] leading-relaxed sm:px-8 sm:py-6"
                   style={{ color: "var(--text-primary)", fontFamily: "var(--font-mono, monospace)" }}>{text}</pre>
               )}
               {kind === "html" && text != null && (
@@ -226,7 +232,7 @@ function ViewerModal({ resource, onClose }: { resource: ViewerResource; onClose:
           )}
 
           {unavailable && (
-            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center sm:px-6">
               <FileText className="size-10" style={{ color: "var(--text-muted)" }} />
               <div>
                 <p className="text-[14px] font-medium" style={{ color: "var(--text-primary)" }}>Preview not available</p>
@@ -355,7 +361,7 @@ function SheetView({ sheets, sheetCount }: { sheets: PreviewSheet[]; sheetCount:
     <div className="flex h-full flex-col">
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto">
         {rows.length === 0 ? (
-          <p className="px-6 py-10 text-center text-[13px]" style={{ color: "var(--text-muted)" }}>This sheet is empty.</p>
+          <p className="px-4 py-10 text-center text-[13px] sm:px-6" style={{ color: "var(--text-muted)" }}>This sheet is empty.</p>
         ) : (
           <table
             className="border-separate border-spacing-0 text-[12.5px]"
@@ -453,7 +459,7 @@ function SheetView({ sheets, sheetCount }: { sheets: PreviewSheet[]; sheetCount:
 
 function WordView({ preview }: { preview: Extract<FilePreview, { type: "document" }> }) {
   return (
-    <article className="mx-auto max-w-3xl px-8 py-8 sm:px-12">
+    <article className="mx-auto max-w-3xl px-4 py-6 sm:px-8 sm:py-8 md:px-12">
       {preview.blocks.length === 0 && preview.tables.length === 0 && (
         <p className="text-center text-[13px]" style={{ color: "var(--text-muted)" }}>This document has no text.</p>
       )}

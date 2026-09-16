@@ -127,7 +127,7 @@ function SearchPageInner() {
       </div>
 
       {/* Results */}
-      <div className="flex-1 overflow-y-auto px-8 py-5">
+      <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-8 sm:py-5">
         <div className="mx-auto flex max-w-3xl flex-col gap-3">
           {!repoId && (
             <div className="flex flex-col items-center gap-3 py-20 text-center">

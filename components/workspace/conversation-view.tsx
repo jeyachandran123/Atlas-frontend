@@ -6,8 +6,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import { toast } from "sonner";
 import {
-  BookMarked, ChevronDown, Download, Layers, Loader2,
-  Pencil, ShieldAlert, ShieldCheck, Sparkles,
+  BookMarked, ChevronDown, Download, Layers, Loader2, Menu, MoreHorizontal,
+  PanelRight, Pencil, ShieldAlert, ShieldCheck, Sparkles,
   SquareStack, Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,7 @@ import {
 } from "@/lib/api/workspace";
 import { useDeleteConversation, useWorkspaces } from "@/lib/hooks/use-workspace";
 import { useOperationsStore } from "@/lib/stores/operations-store";
+import { useUIStore } from "@/lib/stores/ui-store";
 import { useUploadConfirmStore } from "@/lib/stores/upload-confirm-store";
 import type { Citation, ConversationArtifact } from "@/types/workspace";
 
@@ -101,6 +102,9 @@ export function ConversationView({
   const updateOp = useOperationsStore((s) => s.update);
   const finishOp = useOperationsStore((s) => s.finish);
   const requestUpload = useUploadConfirmStore((s) => s.request);
+  // Both workspace columns fold away on a small screen; these reopen them.
+  const setNavOpen = useUIStore((s) => s.setWorkspaceNavOpen);
+  const setContextOpen = useUIStore((s) => s.setWorkspaceContextOpen);
   const { data: workspaces = [] } = useWorkspaces();
   const workspaceName = workspaces.find((w) => w.id === workspaceId)?.name ?? "this workspace";
 
@@ -479,7 +483,14 @@ export function ConversationView({
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-6 py-3" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+      <div className="flex items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+        <button
+          onClick={() => setNavOpen(true)}
+          aria-label="Open workspace menu"
+          className="icon-btn size-9 shrink-0 rounded-lg md:hidden"
+        >
+          <Menu className="size-[18px]" />
+        </button>
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {editingTitle ? (
             <input
@@ -500,38 +511,82 @@ export function ConversationView({
         <div className="flex shrink-0 items-center gap-1.5">
           <BookmarkButton workspaceId={workspaceId} targetType="conversation" targetId={conversationId}
             note={title || "Conversation"} label="Bookmark" />
-          <Button size="sm" variant="ghost" onClick={saveAsKnowledge} disabled={saving || !hasHistory}>
-            {saving ? <Loader2 className="animate-spin" /> : <BookMarked />} Save as knowledge
-          </Button>
+
+          {/* Inline where there is room. Four labelled controls need roughly
+              370px, and a phone has about 390px in total — so below sm they
+              collapse into the single menu underneath. */}
+          <div className="hidden items-center gap-1.5 sm:flex">
+            <Button size="sm" variant="ghost" onClick={saveAsKnowledge} disabled={saving || !hasHistory}>
+              {saving ? <Loader2 className="animate-spin" /> : <BookMarked />} Save as knowledge
+            </Button>
+            <Dropdown.Root>
+              <Dropdown.Trigger asChild>
+                <Button size="sm" variant="ghost" disabled={!hasHistory}>
+                  <Download /> Export <ChevronDown className="size-3" />
+                </Button>
+              </Dropdown.Trigger>
+              <Dropdown.Portal>
+                <Dropdown.Content align="end" sideOffset={6}
+                  className="z-50 w-40 overflow-hidden rounded-xl p-1.5 animate-scale-up"
+                  style={{ background: "var(--surface-overlay)", backdropFilter: "blur(24px)", border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-xl)" }}>
+                  {([["markdown", "Markdown (.md)"], ["pdf", "PDF (.pdf)"], ["word", "Word (.docx)"]] as const).map(([fmt, label]) => (
+                    <Dropdown.Item key={fmt} onSelect={() => exportAs(fmt)}
+                      className="cursor-pointer rounded-lg px-2.5 py-2 text-[13px] outline-none transition-colors data-[highlighted]:bg-[var(--surface-3)]"
+                      style={{ color: "var(--text-primary)" }}>
+                      {label}
+                    </Dropdown.Item>
+                  ))}
+                </Dropdown.Content>
+              </Dropdown.Portal>
+            </Dropdown.Root>
+            <Button size="icon-sm" variant="ghost" onClick={() => setDeleteOpen(true)} aria-label="Delete conversation"
+              className="!text-[color:var(--status-error)]">
+              <Trash2 />
+            </Button>
+          </div>
+
+          {/* The same actions, one tap away, on a narrow screen. */}
           <Dropdown.Root>
             <Dropdown.Trigger asChild>
-              <Button size="sm" variant="ghost" disabled={!hasHistory}>
-                <Download /> Export <ChevronDown className="size-3" />
+              <Button size="icon-sm" variant="ghost" aria-label="Conversation actions" className="sm:hidden">
+                <MoreHorizontal />
               </Button>
             </Dropdown.Trigger>
             <Dropdown.Portal>
               <Dropdown.Content align="end" sideOffset={6}
-                className="z-50 w-40 overflow-hidden rounded-xl p-1.5 animate-scale-up"
+                className="z-50 w-52 overflow-hidden rounded-xl p-1.5 animate-scale-up"
                 style={{ background: "var(--surface-overlay)", backdropFilter: "blur(24px)", border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-xl)" }}>
-                {([["markdown", "Markdown (.md)"], ["pdf", "PDF (.pdf)"], ["word", "Word (.docx)"]] as const).map(([fmt, label]) => (
-                  <Dropdown.Item key={fmt} onSelect={() => exportAs(fmt)}
-                    className="cursor-pointer rounded-lg px-2.5 py-2 text-[13px] outline-none transition-colors data-[highlighted]:bg-[var(--surface-3)]"
+                <Dropdown.Item disabled={saving || !hasHistory} onSelect={saveAsKnowledge}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] outline-none transition-colors data-[highlighted]:bg-[var(--surface-3)] data-[disabled]:opacity-40"
+                  style={{ color: "var(--text-primary)" }}>
+                  <BookMarked className="size-3.5" /> Save as knowledge
+                </Dropdown.Item>
+                {([["markdown", "Export Markdown"], ["pdf", "Export PDF"], ["word", "Export Word"]] as const).map(([fmt, label]) => (
+                  <Dropdown.Item key={fmt} disabled={!hasHistory} onSelect={() => exportAs(fmt)}
+                    className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] outline-none transition-colors data-[highlighted]:bg-[var(--surface-3)] data-[disabled]:opacity-40"
                     style={{ color: "var(--text-primary)" }}>
-                    {label}
+                    <Download className="size-3.5" /> {label}
                   </Dropdown.Item>
                 ))}
+                <Dropdown.Item onSelect={() => setDeleteOpen(true)}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] outline-none transition-colors data-[highlighted]:bg-[var(--danger-bg)]"
+                  style={{ color: "var(--status-error)" }}>
+                  <Trash2 className="size-3.5" /> Delete conversation
+                </Dropdown.Item>
               </Dropdown.Content>
             </Dropdown.Portal>
           </Dropdown.Root>
-          <Button size="icon-sm" variant="ghost" onClick={() => setDeleteOpen(true)} aria-label="Delete conversation"
-            className="!text-[color:var(--status-error)]">
-            <Trash2 />
+
+          {/* The context column folds away below lg; this opens it as a sheet. */}
+          <Button size="icon-sm" variant="ghost" onClick={() => setContextOpen(true)}
+            aria-label="Open workspace context" className="lg:hidden">
+            <PanelRight />
           </Button>
         </div>
       </div>
 
       {/* Compact retrieval-scope cue. */}
-      <div className="flex items-center gap-2 px-6 py-1.5 text-[11px]" style={{ borderBottom: "1px solid var(--border-subtle)", color: "var(--text-muted)" }}>
+      <div className="flex items-center gap-2 px-3 py-1.5 text-[11px] sm:px-6" style={{ borderBottom: "1px solid var(--border-subtle)", color: "var(--text-muted)" }}>
         {retrievalMode === "all" ? (
           <><Layers className="size-3" /> Using all documents</>
         ) : (
@@ -540,7 +595,7 @@ export function ConversationView({
       </div>
 
       {/* Thread */}
-      <div className="flex-1 overflow-y-auto px-6 py-5">
+      <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
         {restoring && !hasHistory ? (
           // The history is on its way — not the empty "start a conversation" hero.
           <div className="mx-auto max-w-2xl">
@@ -662,7 +717,7 @@ export function ConversationView({
       </div>
 
       {/* Composer — the single entry point for chat AND generation */}
-      <div className="px-6 pb-5">
+      <div className="px-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6 sm:pb-5">
         <div className="mx-auto max-w-2xl">
           <WorkspaceComposer
             value={input}

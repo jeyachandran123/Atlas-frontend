@@ -19,7 +19,12 @@ import {
 import { cn } from "@/lib/utils/cn";
 import type { Workspace, WorkspaceConversation } from "@/types/workspace";
 
-export function WorkspaceSidebar({ workspace }: { workspace: Workspace }) {
+/**
+ * The workspace's own nav: switcher, search, tabs and conversations. Rendered
+ * in the column from `md` up and inside a drawer below it — one implementation,
+ * the same way the app sidebar works.
+ */
+export function WorkspaceSidebarContent({ workspace }: { workspace: Workspace }) {
   const router = useRouter();
   const pathname = usePathname();
   const { data: conversations = [], isLoading } = useWorkspaceConversations(workspace.id);
@@ -54,10 +59,7 @@ export function WorkspaceSidebar({ workspace }: { workspace: Workspace }) {
   ];
 
   return (
-    <div
-      className="flex h-full w-[264px] shrink-0 flex-col"
-      style={{ borderRight: "1px solid var(--border-subtle)", background: "var(--sidebar-bg)" }}
-    >
+    <>
       <div className="p-2.5">
         <WorkspaceSwitcher current={workspace} />
       </div>
@@ -186,6 +188,18 @@ export function WorkspaceSidebar({ workspace }: { workspace: Workspace }) {
         pending={deleteConv.isPending}
         onConfirm={confirmDelete}
       />
+    </>
+  );
+}
+
+/** The workspace nav column — from `md` up. Below that it is a drawer. */
+export function WorkspaceSidebar({ workspace }: { workspace: Workspace }) {
+  return (
+    <div
+      className="hidden h-full w-[264px] shrink-0 flex-col md:flex"
+      style={{ borderRight: "1px solid var(--border-subtle)", background: "var(--sidebar-bg)" }}
+    >
+      <WorkspaceSidebarContent workspace={workspace} />
     </div>
   );
 }
