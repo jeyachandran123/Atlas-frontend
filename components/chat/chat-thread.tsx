@@ -116,6 +116,9 @@ export function ChatThread() {
   const rafRef = useRef<number | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [hasNewBelow, setHasNewBelow] = useState(false);
+  // Sending pins your message to the top and lets the reply grow underneath,
+  // instead of keeping the view glued to the bottom edge.
+  const [pinned, setPinned] = useState(false);
   const [activePromptId, setActivePromptId] = useState<string | null>(null);
   const [flashId, setFlashId] = useState<string | null>(null);
 
@@ -153,9 +156,11 @@ export function ChatThread() {
   // a race against the reader's own hand.
   function handleWheel(e: React.WheelEvent) {
     if (e.deltaY < 0) followRef.current = false;
+    setPinned(false);
   }
   function handleTouchMove() {
     followRef.current = false;
+    setPinned(false);
   }
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
@@ -165,6 +170,24 @@ export function ChatThread() {
     setHasNewBelow(false);
     el.scrollTo({ top: el.scrollHeight, behavior });
   }, []);
+
+  /** Bring one message to the top of the view — the same move the navigator makes. */
+  const pinToTop = useCallback((id: string) => {
+    const el = scrollRef.current;
+    const node = el?.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(id)}"]`);
+    if (!el || !node) return;
+    el.scrollTo({ top: Math.max(0, node.offsetTop - JUMP_OFFSET_PX), behavior: "smooth" });
+  }, []);
+
+  /** Sending: stop following the bottom, so the answer can grow below the prompt.
+   *  followRef is set here rather than in the effect because the follow effect
+   *  runs first on the next render and would scroll to the bottom before the
+   *  pin ever happened. */
+  function beginPinnedSend() {
+    followRef.current = false;
+    setHasNewBelow(false);
+    setPinned(true);
+  }
 
   const jumpToPrompt = useCallback((id: string) => {
     const el = scrollRef.current;
@@ -192,10 +215,25 @@ export function ChatThread() {
     if (!el) return;
     if (followRef.current) {
       el.scrollTop = el.scrollHeight;
-    } else if (isActiveStream || activeStreamContent) {
+    } else if (!pinned && (isActiveStream || activeStreamContent)) {
+      // While pinned the new content is on screen, directly under the prompt —
+      // announcing it as "new below" would be pointing at what you can see.
       setHasNewBelow(true);
     }
-  }, [messages.length, activeStreamContent, streamingReasoning, isActiveStream, showOptimistic]);
+  }, [messages.length, activeStreamContent, streamingReasoning, isActiveStream, showOptimistic, pinned]);
+
+  // The bubble must be in the DOM before it can be scrolled to, hence the frame.
+  useEffect(() => {
+    if (!pinned || !showOptimistic || !optimisticUserMessage) return;
+    const id = optimisticUserMessage.id;
+    const frame = requestAnimationFrame(() => pinToTop(id));
+    return () => cancelAnimationFrame(frame);
+  }, [pinned, showOptimistic, optimisticUserMessage, pinToTop]);
+
+  // The reply has landed: release the pin so normal following resumes.
+  useEffect(() => {
+    if (pinned && !isActiveStream && streamEndedAt !== null) setPinned(false);
+  }, [pinned, isActiveStream, streamEndedAt]);
 
   useEffect(() => { updateActivePrompt(); }, [updateActivePrompt]);
   useEffect(() => () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); }, []);
@@ -291,7 +329,7 @@ export function ChatThread() {
                       isLastUserWithoutReply={m.role === "user" && i === lastUnansweredUserIdx && !isActiveStream}
                       isLast={i === messages.length - 1 && !isActiveStream}
                       onClarifySubmit={(text) => {
-                        scrollToBottom("smooth");
+                        beginPinnedSend();
                         send(text, selectedRepoId ?? undefined, useChatStore.getState().agentMode);
                       }}
                     />
@@ -300,7 +338,12 @@ export function ChatThread() {
 
                 {showOptimistic &&
                   !messages.find((m) => m.content === optimisticUserMessage!.content && m.role === "user") && (
-                    <MessageBubble key={optimisticUserMessage!.id} message={optimisticUserMessage!} />
+                    // Wrapped like the saved messages above: pinToTop finds it by
+                    // data-msg-id, and without the wrapper the message you just
+                    // sent is the one thing on screen that cannot be scrolled to.
+                    <div key={optimisticUserMessage!.id} data-msg-id={optimisticUserMessage!.id} className="-mx-3 px-3 py-1">
+                      <MessageBubble message={optimisticUserMessage!} />
+                    </div>
                   )}
 
                 {(isActiveStream || handingOver) && (
@@ -335,7 +378,11 @@ export function ChatThread() {
                   </div>
                 )}
               </div>
-              <div className="h-4" />
+              {/* Room to scroll into. A prompt can only reach the top if there is
+                  height beneath it, so while a reply is in flight this opens up
+                  and then collapses — a permanent tall spacer would leave a dead
+                  gap under every finished conversation. */}
+              <div className={pinned ? "h-[60dvh] transition-[height] duration-300" : "h-4"} />
             </div>
           )}
         </div>
@@ -364,8 +411,8 @@ export function ChatThread() {
           )}
           <ChatInput
             onSend={(msg, files, agentId) => {
-              // Sending is a clear signal you want to see what comes next.
-              scrollToBottom("smooth");
+              // Your message goes to the top and the answer grows underneath it.
+              beginPinnedSend();
               send(msg, selectedRepoId ?? undefined, agentId ?? "auto", files);
             }}
             onStop={stop}

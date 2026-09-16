@@ -90,55 +90,63 @@ export function ChatFileCard({ data }: { data: ChatFilePayload }) {
     : SOURCE_NOTE[(data.source ?? "").toLowerCase()];
 
   return (
+    // One row on a wide screen. On a phone the icon, the two buttons and their
+    // gaps take ~267px of ~340px, leaving ~70px for the text — which is why the
+    // source note wrapped one word per line. Below `sm` the buttons drop to
+    // their own full-width row instead.
     <div
-      className="group flex w-full max-w-[560px] items-center gap-3.5 rounded-2xl p-3.5 transition-all duration-200 animate-fade-in-up hover:shadow-lg"
+      className="group flex w-full max-w-[560px] flex-col gap-3 rounded-2xl p-3.5 transition-all duration-200 animate-fade-in-up hover:shadow-lg sm:flex-row sm:items-center sm:gap-3.5"
       style={{ background: "var(--surface-1)", border: "1px solid var(--border-default)" }}
     >
-      <div
-        className="flex size-11 shrink-0 items-center justify-center rounded-xl"
-        style={{ background: `${fmt.color}1a`, border: `1px solid ${fmt.color}33` }}
-      >
-        <fmt.Icon className="size-5" style={{ color: fmt.color }} />
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-[13.5px] font-medium" style={{ color: "var(--text-primary)" }}>
-            {data.title || data.filename || "Your file"}
-          </p>
-          <span
-            className="shrink-0 rounded-md px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide"
-            style={{ background: `${fmt.color}1a`, color: fmt.color }}
-          >
-            {fmt.label}
-          </span>
+      <div className="flex min-w-0 flex-1 items-center gap-3.5">
+        <div
+          className="flex size-11 shrink-0 items-center justify-center rounded-xl"
+          style={{ background: `${fmt.color}1a`, border: `1px solid ${fmt.color}33` }}
+        >
+          <fmt.Icon className="size-5" style={{ color: fmt.color }} />
         </div>
-        {meta && (
-          <p className="mt-0.5 truncate text-[11.5px]" style={{ color: "var(--text-muted)" }}>{meta}</p>
-        )}
-        {note && (
-          <p className="mt-1 text-[11.5px]" style={{ color: "var(--text-tertiary)" }}>{note}</p>
-        )}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-[13.5px] font-medium" style={{ color: "var(--text-primary)" }}>
+              {data.title || data.filename || "Your file"}
+            </p>
+            <span
+              className="shrink-0 rounded-md px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide"
+              style={{ background: `${fmt.color}1a`, color: fmt.color }}
+            >
+              {fmt.label}
+            </span>
+          </div>
+          {meta && (
+            <p className="mt-0.5 truncate text-[11.5px]" style={{ color: "var(--text-muted)" }}>{meta}</p>
+          )}
+          {note && (
+            <p className="mt-1 text-[11.5px]" style={{ color: "var(--text-tertiary)" }}>{note}</p>
+          )}
+        </div>
       </div>
 
-      <button
-        onClick={view}
-        disabled={!data.artifact_id}
-        className="ghost-btn flex shrink-0 items-center gap-1.5 px-3 py-2 text-[12.5px] font-medium"
-      >
-        <Eye className="size-3.5" /> View
-      </button>
-      <button
-        onClick={() => void download()}
-        disabled={!data.artifact_id || state === "busy"}
-        className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[12.5px] font-medium text-white transition-all duration-150 disabled:opacity-60"
-        style={{ background: "var(--accent-gradient)", boxShadow: "0 4px 14px rgba(99,102,241,0.28)" }}
-      >
-        {state === "busy" ? <Loader2 className="size-3.5 animate-spin" />
-          : state === "done" ? <Check className="size-3.5" />
-          : <Download className="size-3.5" />}
-        {state === "error" ? "Retry" : state === "done" ? "Saved" : "Download"}
-      </button>
+      <div className="flex shrink-0 items-center gap-2">
+        <button
+          onClick={view}
+          disabled={!data.artifact_id}
+          className="ghost-btn flex flex-1 items-center justify-center gap-1.5 px-3 py-2 text-[12.5px] font-medium sm:flex-none"
+        >
+          <Eye className="size-3.5" /> View
+        </button>
+        <button
+          onClick={() => void download()}
+          disabled={!data.artifact_id || state === "busy"}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12.5px] font-medium text-white transition-all duration-150 disabled:opacity-60 sm:flex-none"
+          style={{ background: "var(--accent-gradient)", boxShadow: "0 4px 14px rgba(99,102,241,0.28)" }}
+        >
+          {state === "busy" ? <Loader2 className="size-3.5 animate-spin" />
+            : state === "done" ? <Check className="size-3.5" />
+            : <Download className="size-3.5" />}
+          {state === "error" ? "Retry" : state === "done" ? "Saved" : "Download"}
+        </button>
+      </div>
     </div>
   );
 }

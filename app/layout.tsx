@@ -36,6 +36,11 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // The on-screen keyboard shrinks the layout viewport instead of shoving the
+  // page up behind it. h-dvh then recalculates, so the composer sits on top of
+  // the keyboard and the conversation scrolls underneath — rather than the
+  // whole page sliding and taking the header with it.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
