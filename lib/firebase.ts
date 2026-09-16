@@ -10,6 +10,7 @@ import {
   getAuth,
   signInWithPopup,
   GoogleAuthProvider,
+  OAuthProvider,
   signOut as firebaseSignOut,
   onIdTokenChanged,
   type Auth,
@@ -53,6 +54,51 @@ export function getFirebaseAuth(): Auth {
   return auth;
 }
 
+/** What went wrong in the sign-in popup, said plainly. */
+function popupError(error: unknown, provider: string): Error {
+  if (error && typeof error === "object" && "code" in error) {
+    const e = error as { code: string; message: string };
+    const detail = e.message ?? "";
+    // Firebase passes the provider's own reply through verbatim — a paragraph of
+    // URL-encoded text. Keep it for whoever is debugging, show a sentence.
+    console.debug(`${provider} sign-in failed:`, e.code, detail);
+
+    if (detail.includes("AADSTS50194") || detail.includes("not configured as a multi-tenant")) {
+      return new Error(
+        `${provider} sign-in is registered for one organisation only. Set ` +
+        "NEXT_PUBLIC_MICROSOFT_TENANT to your Azure directory (tenant) id, or make the " +
+        "app multi-tenant in Azure.",
+      );
+    }
+    if (detail.includes("AADSTS")) {
+      // Any other complaint from Microsoft Entra ID, minus the wall of text.
+      const code = /AADSTS\d+/.exec(detail)?.[0];
+      return new Error(
+        `${provider} refused the sign-in${code ? ` (${code})` : ""}. Check the app registration in Azure.`,
+      );
+    }
+
+    switch (e.code) {
+      case "auth/invalid-credential":
+        return new Error(`${provider} refused the sign-in. Check the provider's setup in Firebase and Azure.`);
+      case "auth/popup-closed-by-user":
+      case "auth/cancelled-popup-request":
+        return new Error("Sign-in cancelled.");
+      case "auth/popup-blocked":
+        return new Error("Your browser blocked the sign-in window. Allow pop-ups for this site and try again.");
+      case "auth/account-exists-with-different-credential":
+        return new Error(`This email already signs in another way. Use that method instead of ${provider}.`);
+      case "auth/operation-not-allowed":
+        return new Error(`${provider} sign-in isn't switched on for this app yet.`);
+      case "auth/unauthorized-domain":
+        return new Error("This address isn't allowed to sign in. Add it to Firebase's authorised domains.");
+      default:
+        return new Error(e.message || `${provider} sign-in failed.`);
+    }
+  }
+  return error instanceof Error ? error : new Error(`${provider} sign-in failed.`);
+}
+
 /**
  * Sign in with Google using a popup window.
  * Returns the UserCredential directly — no redirect needed.
@@ -64,14 +110,31 @@ export async function signInWithGoogle(): Promise<UserCredential> {
   try {
     return await signInWithPopup(auth, provider);
   } catch (error: unknown) {
-    if (error && typeof error === "object" && "code" in error) {
-      const e = error as { code: string; message: string };
-      if (e.code === "auth/popup-closed-by-user" || e.code === "auth/cancelled-popup-request") {
-        throw new Error("Sign-in cancelled.");
-      }
-      throw new Error(e.message || "Google sign-in failed.");
-    }
-    throw error;
+    throw popupError(error, "Google");
+  }
+}
+
+/**
+ * Sign in with a Microsoft work, school or personal account.
+ *
+ * NEXT_PUBLIC_MICROSOFT_TENANT limits it to one organisation (its directory id);
+ * unset, any Microsoft account may sign in. The backend already knows this
+ * provider — it reads "microsoft.com" from the token as "microsoft".
+ */
+export async function signInWithMicrosoft(): Promise<UserCredential> {
+  const auth = getFirebaseAuth();
+  const provider = new OAuthProvider("microsoft.com");
+  provider.setCustomParameters({
+    prompt: "select_account",
+    tenant: process.env.NEXT_PUBLIC_MICROSOFT_TENANT || "common",
+  });
+  // The account's address is what the backend identifies the user by.
+  provider.addScope("email");
+  provider.addScope("profile");
+  try {
+    return await signInWithPopup(auth, provider);
+  } catch (error: unknown) {
+    throw popupError(error, "Microsoft");
   }
 }
 

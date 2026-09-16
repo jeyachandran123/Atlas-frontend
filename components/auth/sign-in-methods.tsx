@@ -25,6 +25,7 @@ export function SignInMethods() {
 
   const hasPassword = !!user.has_password;
   const google = user.auth_provider === "google";
+  const microsoft = user.auth_provider === "microsoft";
   const tooShort = next.length > 0 && next.length < 8;
   const mismatch = confirm.length > 0 && next !== confirm;
   const valid = next.length >= 8 && next === confirm && (!hasPassword || current.length > 0);
@@ -84,6 +85,27 @@ export function SignInMethods() {
           </p>
         </div>
         {google && <StatusPill label="Connected" />}
+      </div>
+
+      {/* Microsoft */}
+      <div className="flex items-center gap-3 px-4 py-3" style={{ borderTop: "1px solid var(--border-subtle)" }}>
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+          <svg className="size-4" viewBox="0 0 23 23" aria-hidden>
+            <path fill="#F25022" d="M1 1h10v10H1z" />
+            <path fill="#7FBA00" d="M12 1h10v10H12z" />
+            <path fill="#00A4EF" d="M1 12h10v10H1z" />
+            <path fill="#FFB900" d="M12 12h10v10H12z" />
+          </svg>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>Microsoft</p>
+          <p className="truncate text-[11.5px]" style={{ color: "var(--text-tertiary)" }}>
+            {microsoft
+              ? `Continue with Microsoft as ${user.email}`
+              : "Use “Continue with Microsoft” with this email to connect it."}
+          </p>
+        </div>
+        {microsoft && <StatusPill label="Connected" />}
       </div>
 
       {/* Password */}
