@@ -182,7 +182,22 @@ export function ConversationView({
     setItems([...askItems, ...genItems].sort((x, y) => x.createdAt - y.createdAt));
   }, [restore, conversationId]);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [items]);
+  // Follow new text only while the reader is already at the bottom. Scrolling
+  // on every token pulled someone reading step 3 down to step 9 mid-sentence.
+  const atBottomRef = useRef(true);
+  useEffect(() => {
+    const el = bottomRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { atBottomRef.current = entry?.isIntersecting ?? true; },
+      { rootMargin: "0px 0px 120px 0px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    if (atBottomRef.current) bottomRef.current?.scrollIntoView({ block: "end" });
+  }, [items]);
   useEffect(() => () => abortRef.current?.abort(), []);
 
   // Search → "scroll to the generated document message". The result navigates

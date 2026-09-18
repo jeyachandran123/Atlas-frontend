@@ -382,7 +382,9 @@ export function useStreamChat() {
       const files = await attachmentsOf(conversationId, messageId, keep);
       if (files === null) return;
       await truncateFrom(conversationId, messageId);
-      send(newText, repoId, "auto", files.length > 0 ? files : undefined);
+      // The mode picked in the composer, read now — hard-coding "auto" sent a
+      // Reasoning conversation's edits and retries to the everyday model.
+      send(newText, repoId, useChatStore.getState().agentMode, files.length > 0 ? files : undefined);
     },
     [activeConversationId, attachmentsOf, send, truncateFrom],
   );
@@ -394,7 +396,7 @@ export function useStreamChat() {
       const files = await attachmentsOf(conversationId, messageId);
       if (files === null) return;
       await truncateFrom(conversationId, messageId, content);
-      send(content, repoId, "auto", files.length > 0 ? files : undefined);
+      send(content, repoId, useChatStore.getState().agentMode, files.length > 0 ? files : undefined);
     },
     [activeConversationId, attachmentsOf, send, truncateFrom],
   );

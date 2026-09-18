@@ -96,7 +96,7 @@ function ReasoningPanel({ reasoning, answering }: { reasoning: string; answering
 }
 
 export function StreamingMessageBubble({
-  content, activeToolCall, reasoning = "", fileStage = null, file = null,
+  content, activeToolCall, reasoning = "", fileStage = null, file = null, interrupted = null,
 }: {
   content: string;
   activeToolCall: ActiveToolCall | null;
@@ -106,7 +106,26 @@ export function StreamingMessageBubble({
   fileStage?: string | null;
   /** The file this turn made — shown at once, with its overview streaming below. */
   file?: ChatFilePayload | null;
+  /**
+   * Set when the reply ended early (stopped, or failed part-way): what was
+   * already written stays readable, marked as unfinished, instead of vanishing.
+   */
+  interrupted?: string | null;
 }) {
+  if (interrupted) {
+    return (
+      <div className="flex gap-3 animate-fade-in">
+        <AtlasAvatar />
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <MessageMarkdown content={content} />
+          <p className="text-[12.5px] italic" style={{ color: "var(--text-tertiary)" }}>
+            {interrupted}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex gap-3 animate-fade-in-up">
       <AtlasAvatar streaming />

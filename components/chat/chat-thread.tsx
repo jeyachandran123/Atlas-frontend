@@ -18,6 +18,28 @@ const NEAR_BOTTOM_PX = 120;
 /** Where a prompt lands when jumped to — a little breathing room above it. */
 const JUMP_OFFSET_PX = 16;
 
+/**
+ * A stream error as a sentence a person would say. The raw text is an
+ * exception or an HTTP status line ("httpx.ReadTimeout: timed out",
+ * "Stream request failed: 502 — …") — accurate, and meaningless to the reader.
+ */
+function humanStreamError(raw: string | null): string {
+  const text = (raw ?? "").toLowerCase();
+  if (/\b401\b|unauthori[sz]ed|expired|not authenticated/.test(text)) {
+    return "Your session expired while I was answering. Refresh the page to sign back in, then try again.";
+  }
+  if (/\b429\b|rate limit|too many requests/.test(text)) {
+    return "I'm getting a lot of requests right now. Give it a few seconds, then try again.";
+  }
+  if (/timeout|timed out|\b504\b/.test(text)) {
+    return "That took longer than it should have, so I stopped waiting. Try again — it usually goes through.";
+  }
+  if (/failed to fetch|network|connection|\b502\b|\b503\b/.test(text)) {
+    return "I lost the connection before I could finish. Try again in a moment.";
+  }
+  return "Something went wrong on my side while answering. Try again, and if it keeps happening, rephrasing usually helps.";
+}
+
 export function ChatThread() {
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const selectedRepoId = useChatStore((s) => s.selectedRepoId);
@@ -56,6 +78,20 @@ export function ChatThread() {
     !isActiveStream && !streamError && streamEndedAt !== null
     && streamingConversationId === activeConversationId
     && lastMessage?.role !== "assistant" && dataUpdatedAt <= streamEndedAt;
+
+  // A reply that was stopped or failed part-way saves nothing, so the refetch
+  // brings back no copy of it. It used to disappear then — the six steps of a
+  // walkthrough someone was reading, gone. What was written stays, marked as
+  // unfinished, until the next message or conversation replaces it.
+  const keptPartial =
+    !isActiveStream && !handingOver && streamEndedAt !== null
+    && streamingConversationId === activeConversationId
+    && !!activeStreamContent && lastMessage?.role !== "assistant";
+  const interruptedNote = keptPartial
+    ? streamError
+      ? "I didn't get to finish this reply."
+      : "You stopped this reply here, so it wasn't saved."
+    : null;
 
   // Conversation title for the header (best-effort from the cached list)
   const { data: convData } = useConversations();
@@ -239,13 +275,21 @@ export function ChatThread() {
   useEffect(() => () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); }, []);
 
   // Once the saved reply has taken its place, the streamed copy is done with.
-  // A failed turn keeps its prompt for the error banner's retry.
+  // A failed turn keeps its prompt for the error banner's retry, and a stopped
+  // turn with text keeps that text (keptPartial) — nothing saved replaces it.
+  const lastIsAssistant = lastMessage?.role === "assistant";
   useEffect(() => {
-    if (!isActiveStream && streamEndedAt !== null && !handingOver && !streamError) {
+    if (
+      !isActiveStream && streamEndedAt !== null && !handingOver && !streamError
+      && (lastIsAssistant || !streamingContent)
+    ) {
       resetStreamingContent();
       clearOptimisticMessage();
     }
-  }, [isActiveStream, streamEndedAt, handingOver, streamError, resetStreamingContent, clearOptimisticMessage]);
+  }, [
+    isActiveStream, streamEndedAt, handingOver, streamError, lastIsAssistant, streamingContent,
+    resetStreamingContent, clearOptimisticMessage,
+  ]);
 
   const isEmpty = messages.length === 0 && !isActiveStream && !isLoading && !showOptimistic;
 
@@ -346,8 +390,8 @@ export function ChatThread() {
                     </div>
                   )}
 
-                {(isActiveStream || handingOver) && (
-                  <StreamingMessageBubble content={activeStreamContent} activeToolCall={activeToolCall} reasoning={isActiveStream ? streamingReasoning : ""} fileStage={isActiveStream ? streamingFileStage : null} file={streamingConversationId === activeConversationId ? streamingFile : null} />
+                {(isActiveStream || handingOver || keptPartial) && (
+                  <StreamingMessageBubble content={activeStreamContent} activeToolCall={activeToolCall} reasoning={isActiveStream ? streamingReasoning : ""} fileStage={isActiveStream ? streamingFileStage : null} file={streamingConversationId === activeConversationId ? streamingFile : null} interrupted={interruptedNote} />
                 )}
 
                 {showStreamError && (
@@ -359,9 +403,10 @@ export function ChatThread() {
                       color: "var(--danger)",
                     }}
                   >
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <AlertCircle className="size-4 shrink-0" />
-                      <span className="truncate">{streamError}</span>
+                    <div className="flex min-w-0 items-start gap-2.5">
+                      <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                      {/* The raw error stays in the tooltip for whoever is debugging. */}
+                      <span title={streamError ?? undefined}>{humanStreamError(streamError)}</span>
                     </div>
                     {lastUserMessage && (
                       <button
