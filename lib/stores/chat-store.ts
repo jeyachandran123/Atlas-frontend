@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ChatFilePayload, ChatStreamEvent, MessageOut, AgentMode } from "@/types/api";
+import type { ChatFilePayload, ChatStreamEvent, MessageOut, AgentMode, WebSourceOut, SourceImageOut } from "@/types/api";
 
 export interface ActiveToolCall {
   toolName: string;
@@ -45,6 +45,17 @@ interface ChatState {
   streamingFileStage: string | null;
   /** The file this turn made, shown live while its overview streams in. */
   streamingFile: ChatFilePayload | null;
+  /** What the web search is doing right now, or null when none is running. */
+  searchStage: { stage: "searching" | "reading"; queries?: string[]; count?: number } | null;
+  /** The pages this turn found. They arrive before the first token. */
+  streamingSources: WebSourceOut[];
+  /** The pictures worth showing for this turn, usually none. */
+  streamingSourceImages: SourceImageOut[];
+  /** What was searched for, shown in the header line. */
+  streamingSearchQuery: string | null;
+  /** The globe: true makes the next message search whatever the model thinks. */
+  webSearch: boolean;
+  setWebSearch: (on: boolean) => void;
   /** Text (and files) a quick-start card puts in the prompt box — taken once by ChatInput. */
   composerDraft: ComposerDraft | null;
   /**
@@ -97,6 +108,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamingReasoning: "",
   streamingFileStage: null,
   streamingFile: null,
+  searchStage: null,
+  streamingSources: [],
+  streamingSourceImages: [],
+  streamingSearchQuery: null,
+  webSearch: false,
   composerDraft: null,
   streamEndedAt: null,
   messageImages: {},
@@ -115,6 +131,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setThinking: (value) => set({ thinking: value }),
 
+  setWebSearch: (on) => set({ webSearch: on }),
+
   startStream: (controller, userMessage, conversationId) =>
     set({
       isStreaming: true,
@@ -123,6 +141,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       streamingReasoning: "",
       streamingFileStage: null,
       streamingFile: null,
+      searchStage: null,
+      streamingSources: [],
+      streamingSourceImages: [],
+      streamingSearchQuery: null,
       streamEndedAt: null,
       streamError: null,
       activeToolCall: null,
@@ -138,11 +160,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
       case "file":
         set({ streamingFile: { ...event }, streamingFileStage: null });
         break;
+      case "search_stage":
+        set({ searchStage: { stage: event.stage, queries: event.queries, count: event.count } });
+        break;
+      case "sources":
+        // The stage line is replaced by the cards it produced.
+        set({
+          streamingSources: event.sources,
+          streamingSourceImages: event.images ?? [],
+          streamingSearchQuery: event.queries?.[0] ?? null,
+          searchStage: null,
+        });
+        break;
       case "reasoning":
         set((s) => ({ streamingReasoning: s.streamingReasoning + event.content }));
         break;
       case "token":
-        set((s) => ({ streamingContent: s.streamingContent + event.content, activeToolCall: null }));
+        // The first token means every preparatory step is over, including a
+        // search that found nothing and would otherwise leave its line on screen.
+        set((s) => ({
+          streamingContent: s.streamingContent + event.content,
+          activeToolCall: null,
+          searchStage: null,
+        }));
         break;
       case "tool_call":
         set({
@@ -167,19 +207,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
   endStream: () =>
     set((s) => ({
       isStreaming: false, activeToolCall: null, abortController: null, streamingFileStage: null,
+      searchStage: null,
       streamEndedAt: s.streamEndedAt ?? Date.now(),
     })),
 
   stopStream: () => {
     get().abortController?.abort();
     set((s) => ({
-      isStreaming: false, activeToolCall: null, abortController: null,
+      isStreaming: false, activeToolCall: null, abortController: null, searchStage: null,
       streamEndedAt: s.streamEndedAt ?? Date.now(),
     }));
   },
 
   resetStreamingContent: () =>
-    set({ streamingContent: "", streamingReasoning: "", streamingFileStage: null, streamingFile: null, streamEndedAt: null }),
+    set({
+      streamingContent: "", streamingReasoning: "", streamingFileStage: null,
+      streamingFile: null, searchStage: null, streamingSources: [],
+      streamingSourceImages: [], streamingSearchQuery: null, streamEndedAt: null,
+    }),
   
   clearOptimisticMessage: () => set({ optimisticUserMessage: null }),
 

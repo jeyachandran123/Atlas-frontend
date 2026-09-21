@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, type KeyboardEvent } from "react";
-import { ArrowUp, Square, Plus, ChevronDown, Check, Paperclip, Camera, X, FileText, Image as ImageIcon, Brain } from "lucide-react";
+import { ArrowUp, Square, Plus, ChevronDown, Check, Paperclip, Camera, X, FileText, Image as ImageIcon, Brain, Globe } from "lucide-react";
 import { toast } from "sonner";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useVoiceInput } from "@/lib/hooks/use-voice-input";
@@ -88,6 +88,8 @@ export function ChatInput({
   const setAgent = useChatStore((s) => s.setAgentMode);
   const thinking = useChatStore((s) => s.thinking);
   const setThinking = useChatStore((s) => s.setThinking);
+  const webSearch = useChatStore((s) => s.webSearch);
+  const setWebSearch = useChatStore((s) => s.setWebSearch);
   const [agentOpen, setAgentOpen] = useState(false);
   const [switchedTo, setSwitchedTo] = useState<string | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -534,6 +536,30 @@ export function ChatInput({
               </button>
             );
           })()}
+
+          {/* The globe: off means the model decides for itself whether a
+              question needs the web, which is the normal case. On forces a
+              search for the next message — the escape hatch for when it
+              decides wrong. */}
+          <button
+            onClick={() => setWebSearch(!webSearch)}
+            disabled={isStreaming}
+            title={
+              webSearch
+                ? "This message will search the web. Click to leave it to the assistant."
+                : "The assistant searches when it needs to. Click to search on this message whatever it thinks."
+            }
+            className="menu-trigger flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium disabled:opacity-50"
+            style={{
+              color: webSearch ? "var(--accent-bright)" : "var(--text-tertiary)",
+              background: webSearch ? "var(--accent-subtle)" : undefined,
+            }}
+            aria-label={webSearch ? "Web search on" : "Web search auto"}
+            aria-pressed={webSearch}
+          >
+            <Globe className="size-3.5" />
+            <span className="hidden sm:inline">{webSearch ? "Web: on" : "Web"}</span>
+          </button>
 
           {/* Repo selector — code mode only, after agent selector */}
           {agent === "code" && (

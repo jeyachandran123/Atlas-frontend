@@ -17,6 +17,9 @@ import { useAuthStore } from "@/lib/stores/auth-store";
 const NEAR_BOTTOM_PX = 120;
 /** Where a prompt lands when jumped to — a little breathing room above it. */
 const JUMP_OFFSET_PX = 16;
+/** The gap left above a prompt that was just sent — close to the top, not
+ *  flush against it. */
+const PIN_TOP_GAP_PX = 28;
 
 /**
  * A stream error as a sentence a person would say. The raw text is an
@@ -48,6 +51,10 @@ export function ChatThread() {
   const streamingReasoning = useChatStore((s) => s.streamingReasoning);
   const streamingFileStage = useChatStore((s) => s.streamingFileStage);
   const streamingFile = useChatStore((s) => s.streamingFile);
+  const searchStage = useChatStore((s) => s.searchStage);
+  const streamingSources = useChatStore((s) => s.streamingSources);
+  const streamingSourceImages = useChatStore((s) => s.streamingSourceImages);
+  const streamingSearchQuery = useChatStore((s) => s.streamingSearchQuery);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const activeToolCall = useChatStore((s) => s.activeToolCall);
   const streamError = useChatStore((s) => s.streamError);
@@ -155,6 +162,15 @@ export function ChatThread() {
   // Sending pins your message to the top and lets the reply grow underneath,
   // instead of keeping the view glued to the bottom edge.
   const [pinned, setPinned] = useState(false);
+  /** The run-off space under the newest prompt, sized straight on the node.
+   *
+   *  It was React state with a height transition, and both were wrong: the
+   *  state arrived a render later and the transition a further 300ms later,
+   *  while the scroll that needed that height ran in the next frame. So the
+   *  browser clamped the scroll to a container that had not grown yet and the
+   *  prompt stopped short — the same bug the fixed 60dvh had, wearing a
+   *  measurement. Writing the height here applies it in the same frame. */
+  const spacerRef = useRef<HTMLDivElement>(null);
   const [activePromptId, setActivePromptId] = useState<string | null>(null);
   const [flashId, setFlashId] = useState<string | null>(null);
 
@@ -187,16 +203,26 @@ export function ChatThread() {
     }
   }
 
+  /** Close the run-off and stop holding the prompt at the top.
+   *
+   *  The height goes with the pin, always. Cancelling one without the other
+   *  left an empty screen's worth of run-off under a live reply: following the
+   *  bottom then scrolled to the bottom of the gap instead of to the text. */
+  const releasePin = useCallback(() => {
+    if (spacerRef.current) spacerRef.current.style.height = "";
+    setPinned(false);
+  }, []);
+
   // A wheel or touch upwards is intent, and it is known before the scroll
   // event lands — acting on it here means the next streamed token cannot win
   // a race against the reader's own hand.
   function handleWheel(e: React.WheelEvent) {
     if (e.deltaY < 0) followRef.current = false;
-    setPinned(false);
+    releasePin();
   }
   function handleTouchMove() {
     followRef.current = false;
-    setPinned(false);
+    releasePin();
   }
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
@@ -207,12 +233,16 @@ export function ChatThread() {
     el.scrollTo({ top: el.scrollHeight, behavior });
   }, []);
 
-  /** Bring one message to the top of the view — the same move the navigator makes. */
-  const pinToTop = useCallback((id: string) => {
+  /** How far the view must move to put a message `gap` below the top, and
+   *  where that would land. Measured from rectangles rather than offsetTop,
+   *  which is relative to whichever ancestor happens to be positioned and was
+   *  leaving the prompt short of the top by the height of the wrappers. */
+  const topTarget = useCallback((id: string, gap: number) => {
     const el = scrollRef.current;
     const node = el?.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(id)}"]`);
-    if (!el || !node) return;
-    el.scrollTo({ top: Math.max(0, node.offsetTop - JUMP_OFFSET_PX), behavior: "smooth" });
+    if (!el || !node) return null;
+    const delta = node.getBoundingClientRect().top - el.getBoundingClientRect().top - gap;
+    return { el, top: el.scrollTop + delta };
   }, []);
 
   /** Sending: stop following the bottom, so the answer can grow below the prompt.
@@ -222,19 +252,24 @@ export function ChatThread() {
   function beginPinnedSend() {
     followRef.current = false;
     setHasNewBelow(false);
+    // Measured fresh for this send: what the last one needed says nothing
+    // about what this one needs.
+    if (spacerRef.current) spacerRef.current.style.height = "";
     setPinned(true);
   }
 
   const jumpToPrompt = useCallback((id: string) => {
-    const el = scrollRef.current;
-    const node = el?.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(id)}"]`);
-    if (!el || !node) return;
+    // Same measurement as the pin: offsetTop is relative to whichever ancestor
+    // is positioned, so the navigator landed short of the top by the height of
+    // the wrappers too.
+    const measured = topTarget(id, JUMP_OFFSET_PX);
+    if (!measured) return;
     followRef.current = false;
-    el.scrollTo({ top: Math.max(0, node.offsetTop - JUMP_OFFSET_PX), behavior: "smooth" });
+    measured.el.scrollTo({ top: Math.max(0, measured.top), behavior: "smooth" });
     setActivePromptId(id);
     setFlashId(id);
     window.setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 1600);
-  }, []);
+  }, [topTarget]);
 
   // Opening a conversation starts at its latest message.
   useEffect(() => {
@@ -250,26 +285,71 @@ export function ChatThread() {
     const el = scrollRef.current;
     if (!el) return;
     if (followRef.current) {
+      // Following the bottom and holding a prompt at the top are the same
+      // thing done two ways, and they cannot both be true: the run-off would
+      // be scrolled to instead of the text, which is the empty screen under a
+      // streaming reply. Following wins here, so the pin and its height go —
+      // whichever path turned following back on, including a scrollbar drag
+      // that no wheel or touch handler ever sees.
+      if (spacerRef.current?.style.height) spacerRef.current.style.height = "";
+      if (pinned) setPinned(false);
       el.scrollTop = el.scrollHeight;
-    } else if (!pinned && (isActiveStream || activeStreamContent)) {
-      // While pinned the new content is on screen, directly under the prompt —
-      // announcing it as "new below" would be pointing at what you can see.
-      setHasNewBelow(true);
+      return;
     }
-  }, [messages.length, activeStreamContent, streamingReasoning, isActiveStream, showOptimistic, pinned]);
+    if (pinned) {
+      // The prompt is held at the top and the reply fills the screen beneath
+      // it. The run-off underneath is what makes that possible, and it SHRINKS
+      // by exactly what the reply grows — so the scrollable height never
+      // changes, and neither does the prompt's position.
+      //
+      // Removing it instead, once the reply was long enough, is what threw the
+      // whole view down to the middle mid-stream: the height vanished, the
+      // browser clamped the scroll, and everything slid. Nothing is removed
+      // here. When the reply finally outgrows the screen the run-off is
+      // already zero, so following the bottom continues from exactly where
+      // the text is, with nothing to jump.
+      const node = optimisticUserMessage
+        ? el.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(optimisticUserMessage.id)}"]`)
+        : null;
+      const spacer = spacerRef.current;
+      if (!node || !spacer) return;
 
-  // The bubble must be in the DOM before it can be scrolled to, hence the frame.
-  useEffect(() => {
-    if (!pinned || !showOptimistic || !optimisticUserMessage) return;
-    const id = optimisticUserMessage.id;
-    const frame = requestAnimationFrame(() => pinToTop(id));
-    return () => cancelAnimationFrame(frame);
-  }, [pinned, showOptimistic, optimisticUserMessage, pinToTop]);
+      const promptTop =
+        node.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+      const replyHeight = el.scrollHeight - spacer.offsetHeight - promptTop;
+      const runOff = el.clientHeight - PIN_TOP_GAP_PX - replyHeight;
 
-  // The reply has landed: release the pin so normal following resumes.
+      if (runOff > 0) {
+        spacer.style.height = `${Math.ceil(runOff)}px`;
+        el.scrollTop = Math.max(0, promptTop - PIN_TOP_GAP_PX);
+      } else {
+        // The reply is taller than the screen: it scrolls from here like any
+        // other content, and the prompt leaves the top the way it should.
+        spacer.style.height = "";
+        setPinned(false);
+        followRef.current = true;
+        el.scrollTop = el.scrollHeight;
+      }
+      return;
+    }
+    if (isActiveStream || activeStreamContent) setHasNewBelow(true);
+  }, [messages.length, activeStreamContent, streamingReasoning, isActiveStream,
+      showOptimistic, pinned, optimisticUserMessage]);
+
+  // There is deliberately no second effect placing the prompt. One did the
+  // first placement on a frame callback while the effect above adjusted the
+  // run-off on every token, and the two wrote the same scroll position from
+  // different measurements — which is the jump. Placement and growth are one
+  // rule now, applied in one place.
+
+  // The reply has landed: release the pin so normal following resumes, and
+  // close the spacer so a finished conversation has no dead space under it.
   useEffect(() => {
-    if (pinned && !isActiveStream && streamEndedAt !== null) setPinned(false);
-  }, [pinned, isActiveStream, streamEndedAt]);
+    // Not conditional on `pinned`: scrolling by hand during a reply cancels
+    // the pin, and the run-off would then stay open as a dead gap under the
+    // finished conversation.
+    if (!isActiveStream && streamEndedAt !== null) releasePin();
+  }, [isActiveStream, streamEndedAt, releasePin]);
 
   useEffect(() => { updateActivePrompt(); }, [updateActivePrompt]);
   useEffect(() => () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); }, []);
@@ -382,7 +462,7 @@ export function ChatThread() {
 
                 {showOptimistic &&
                   !messages.find((m) => m.content === optimisticUserMessage!.content && m.role === "user") && (
-                    // Wrapped like the saved messages above: pinToTop finds it by
+                    // Wrapped like the saved messages above: the pin finds it by
                     // data-msg-id, and without the wrapper the message you just
                     // sent is the one thing on screen that cannot be scrolled to.
                     <div key={optimisticUserMessage!.id} data-msg-id={optimisticUserMessage!.id} className="-mx-3 px-3 py-1">
@@ -391,7 +471,7 @@ export function ChatThread() {
                   )}
 
                 {(isActiveStream || handingOver || keptPartial) && (
-                  <StreamingMessageBubble content={activeStreamContent} activeToolCall={activeToolCall} reasoning={isActiveStream ? streamingReasoning : ""} fileStage={isActiveStream ? streamingFileStage : null} file={streamingConversationId === activeConversationId ? streamingFile : null} interrupted={interruptedNote} />
+                  <StreamingMessageBubble content={activeStreamContent} activeToolCall={activeToolCall} reasoning={isActiveStream ? streamingReasoning : ""} fileStage={isActiveStream ? streamingFileStage : null} file={streamingConversationId === activeConversationId ? streamingFile : null} searchStage={isActiveStream ? searchStage : null} sources={isActiveStream ? streamingSources : []} sourceImages={isActiveStream ? streamingSourceImages : []} searchQuery={isActiveStream ? streamingSearchQuery : null} interrupted={interruptedNote} />
                 )}
 
                 {showStreamError && (
@@ -427,7 +507,7 @@ export function ChatThread() {
                   height beneath it, so while a reply is in flight this opens up
                   and then collapses — a permanent tall spacer would leave a dead
                   gap under every finished conversation. */}
-              <div className={pinned ? "h-[60dvh] transition-[height] duration-300" : "h-4"} />
+              <div ref={spacerRef} className="h-4" />
             </div>
           )}
         </div>

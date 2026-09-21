@@ -5,8 +5,9 @@ import { Brain, ChevronDown, Loader2 } from "lucide-react";
 import { MessageMarkdown } from "@/components/chat/message-markdown";
 import { ToolCallIndicator } from "@/components/chat/tool-call-indicator";
 import { ChatFileCard } from "@/components/chat/chat-file-card";
+import { SearchStatus, WebSources } from "@/components/chat/web-sources";
 import type { ActiveToolCall } from "@/lib/stores/chat-store";
-import type { ChatFilePayload } from "@/types/api";
+import type { ChatFilePayload, SourceImageOut, WebSourceOut } from "@/types/api";
 
 function AtlasAvatar({ streaming }: { streaming?: boolean }) {
   return (
@@ -97,6 +98,7 @@ function ReasoningPanel({ reasoning, answering }: { reasoning: string; answering
 
 export function StreamingMessageBubble({
   content, activeToolCall, reasoning = "", fileStage = null, file = null, interrupted = null,
+  searchStage = null, sources = [], sourceImages = [], searchQuery = null,
 }: {
   content: string;
   activeToolCall: ActiveToolCall | null;
@@ -111,6 +113,14 @@ export function StreamingMessageBubble({
    * already written stays readable, marked as unfinished, instead of vanishing.
    */
   interrupted?: string | null;
+  /** Set while the web is being searched, cleared when the answer starts. */
+  searchStage?: { stage: "searching" | "reading"; queries?: string[]; count?: number } | null;
+  /** The pages found for this turn. They arrive before the first token. */
+  sources?: WebSourceOut[];
+  /** The one or two pictures worth showing, usually none. */
+  sourceImages?: SourceImageOut[];
+  /** What was searched for, shown in the header line. */
+  searchQuery?: string | null;
 }) {
   if (interrupted) {
     return (
@@ -133,6 +143,13 @@ export function StreamingMessageBubble({
       <div className="flex min-w-0 flex-1 flex-col gap-2.5">
         <ToolCallIndicator call={activeToolCall} />
 
+        {/* The web, before the words: the cards replace the status line the
+            moment the search returns, and both sit above the answer. */}
+        {searchStage && <SearchStatus {...searchStage} />}
+        {sources.length > 0 && (
+          <WebSources sources={sources} images={sourceImages} query={searchQuery} />
+        )}
+
         {reasoning && <ReasoningPanel reasoning={reasoning} answering={!!content} />}
 
         {fileStage && !content && !file && <FileStageRow stage={fileStage} />}
@@ -143,13 +160,13 @@ export function StreamingMessageBubble({
 
         {content ? (
           <div className="assistant-content">
-            <MessageMarkdown content={content} />
+            <MessageMarkdown content={content} sources={sources} />
             <span
               className="ml-0.5 inline-block h-[1em] w-0.5 translate-y-0.5 rounded-full animate-cursor"
               style={{ background: "var(--accent)" }}
             />
           </div>
-        ) : !activeToolCall && !reasoning && !fileStage && !file ? (
+        ) : !activeToolCall && !reasoning && !fileStage && !file && !searchStage ? (
           <div className="flex items-center gap-2.5 py-1" role="status" aria-label="UnityWorks is thinking">
             <div className="flex items-center gap-1.5">
               {[0, 150, 300].map((delay) => (

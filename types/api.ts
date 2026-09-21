@@ -190,6 +190,24 @@ export interface MessageDocumentOut {
   url: string;
 }
 
+/** A page the assistant read on the web, as its source card shows it. */
+export interface WebSourceOut {
+  url: string;
+  title: string;
+  domain: string;
+  description: string;
+  thumbnail_url: string | null;
+  favicon_url: string | null;
+  published: string | null;
+}
+
+/** A picture shown with an answer, and the page it came from. */
+export interface SourceImageOut {
+  url: string;
+  source_url: string;
+  title: string;
+}
+
 export interface MessageOut {
   id: string;
   conversation_id: string;
@@ -199,6 +217,12 @@ export interface MessageOut {
   tokens_used: number;
   images?: MessageImageOut[];
   documents?: MessageDocumentOut[];
+  /** Present only on answers that searched the web. */
+  sources?: WebSourceOut[];
+  /** The one or two pictures shown, when pictures helped the answer. */
+  source_images?: SourceImageOut[];
+  /** What was searched for, for the header line. */
+  search_query?: string | null;
   created_at: string;
 }
 
@@ -212,6 +236,8 @@ export interface ChatRequest {
   agent_mode?: AgentMode;
   /** Omitted = the profile's default. true/false force thinking for this message. */
   thinking?: boolean;
+  /** true = the user pressed the globe, so search without asking the model first. */
+  web_search?: boolean;
 }
 
 // Vision-enabled chat uses FormData (multipart), not JSON
@@ -258,6 +284,10 @@ export type ChatStreamEvent =
   | { type: "reasoning"; content: string }
   /** Progress while a file is being made. */
   | { type: "file_stage"; stage: string; format?: string }
+  /** Progress while the web is being searched: "searching", then "reading". */
+  | { type: "search_stage"; stage: "searching" | "reading"; queries?: string[]; count?: number }
+  /** The pages found, sent before the first token so the cards lead the answer. */
+  | { type: "sources"; sources: WebSourceOut[]; images?: SourceImageOut[]; queries?: string[] }
   /** Questions to answer before a file is made (also saved as a message). */
   | { type: "clarify"; questions: unknown[]; intro?: string }
   /** A finished file (also saved as a message). */

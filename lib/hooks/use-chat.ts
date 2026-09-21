@@ -199,6 +199,7 @@ export function useStreamChat() {
       // Read at send time, not captured at render: the toggle may have
       // changed since this callback was created.
       const thinking = useChatStore.getState().thinking;
+      const webSearch = useChatStore.getState().webSearch;
 
       const payload: ChatRequest = {
         message,
@@ -206,6 +207,7 @@ export function useStreamChat() {
         repo_id: repoId,
         agent_mode: agentMode as AgentMode,
         ...(thinking === null ? {} : { thinking }),
+        ...(webSearch ? { web_search: true } : {}),
       };
 
       const controller = streamChatMessage(

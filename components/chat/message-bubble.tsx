@@ -7,6 +7,7 @@ import { MessageMarkdown } from "@/components/chat/message-markdown";
 import { ClarifyCard, type ClarifyPayload } from "@/components/chat/clarify-card";
 import { ChatFileCard, type ChatFilePayload } from "@/components/chat/chat-file-card";
 import { ChatImage, ChatImageGallery, type ChatImageItem } from "@/components/chat/chat-image";
+import { WebSources } from "@/components/chat/web-sources";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ImageLightbox, type LightboxImage } from "@/components/ui/image-lightbox";
 import { cn } from "@/lib/utils/cn";
@@ -472,8 +473,18 @@ function AssistantBody({
     }
   }
   return (
-    <div className="assistant-content min-w-0 w-full">
-      <MessageMarkdown content={message.content} />
+    <div className="min-w-0 w-full">
+      {/* Stored with the message, so the links are still here after a reload. */}
+      {message.sources && message.sources.length > 0 && (
+        <WebSources
+          sources={message.sources}
+          images={message.source_images ?? []}
+          query={message.search_query}
+        />
+      )}
+      <div className="assistant-content min-w-0 w-full">
+        <MessageMarkdown content={message.content} sources={message.sources} />
+      </div>
     </div>
   );
 }
