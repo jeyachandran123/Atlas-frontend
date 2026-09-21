@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { workspaceApi } from "@/lib/api/workspace";
+import { pollInterval } from "@/lib/documents/processing-status";
 
 export function useWorkspaces() {
   return useQuery({ queryKey: ["workspaces"], queryFn: () => workspaceApi.list() });
@@ -20,12 +21,7 @@ export function useWorkspaceDocuments(workspaceId: string | null) {
     queryKey: ["workspace-documents", workspaceId],
     enabled: !!workspaceId,
     queryFn: () => workspaceApi.documents(workspaceId!),
-    refetchInterval: (q) => {
-      const docs = q.state.data ?? [];
-      const active = docs.some((d) =>
-        ["queued", "processing", "retrying"].includes(d.processing_status));
-      return active ? 3000 : false;
-    },
+    refetchInterval: (q) => pollInterval(q.state.data),
   });
 }
 

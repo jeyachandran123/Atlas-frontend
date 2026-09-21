@@ -37,7 +37,7 @@ export default function RepoDetailPage() {
 
   if (isLoading || !repo) {
     return (
-      <div className="h-full overflow-y-auto px-8 py-6">
+      <div className="h-full overflow-y-auto px-4 py-5 sm:px-8 sm:py-6">
         <div className="mx-auto max-w-3xl space-y-4">
           {[72, 180, 140].map((h, i) => (
             <div
@@ -145,10 +145,12 @@ export default function RepoDetailPage() {
         </div>
       </div>
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-5 sm:px-8 sm:py-6">
         <div className="mx-auto max-w-3xl space-y-6">
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Three across gives each card ~78px of content at 390px, which is
+              not enough for "Last indexed" above a relative time. */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <StatCard icon={FileCode2} label="Files" value={repo.file_count.toLocaleString()} />
             <StatCard icon={Layers} label="Chunks" value={repo.chunk_count.toLocaleString()} />
             <StatCard

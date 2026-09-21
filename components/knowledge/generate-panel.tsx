@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileOutput, Loader2, X } from "lucide-react";
+import { Download, Eye, FileOutput, Loader2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GENERATE_STAGE_LABELS, StageIndicator } from "@/components/knowledge/stage-indicator";
 import { knowledgeApi, streamGenerate } from "@/lib/api/knowledge";
+import { useViewerStore } from "@/lib/stores/viewer-store";
 
 const FORMAT_LABELS: Record<string, string> = {
   excel: "Excel (.xlsx)", pdf: "PDF (.pdf)", word: "Word (.docx)",
@@ -78,6 +79,11 @@ export function GeneratePanel({
     window.open(url, "_blank");
   }
 
+  const openViewer = useViewerStore((s) => s.open);
+  function view(a: { id: string; filename: string; title?: string | null; format?: string }) {
+    openViewer({ kind: "artifact", id: a.id, title: a.title || a.filename, filename: a.filename, extension: a.format });
+  }
+
   return (
     <div
       className="flex h-full w-[340px] shrink-0 flex-col overflow-y-auto"
@@ -147,9 +153,14 @@ export function GeneratePanel({
                     {result.filename}
                   </span>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => void download(result.id)}>
-                  <Download /> Download
-                </Button>
+                <div className="flex gap-1.5">
+                  <Button size="sm" variant="outline" onClick={() => view({ id: result.id, filename: result.filename, format })}>
+                    <Eye /> View
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => void download(result.id)}>
+                    <Download /> Download
+                  </Button>
+                </div>
               </>
             ) : (
               <p className="text-[12px]" style={{ color: "var(--status-error)" }}>
@@ -176,10 +187,15 @@ export function GeneratePanel({
                   {a.filename || a.title || a.format}
                 </span>
                 {a.status === "ready" ? (
-                  <button onClick={() => void download(a.id)} aria-label={`Download ${a.filename}`}
-                    className="shrink-0">
-                    <Download className="size-3.5" style={{ color: "var(--signal)" }} />
-                  </button>
+                  <>
+                    <button onClick={() => view(a)} aria-label={`View ${a.filename}`} className="shrink-0">
+                      <Eye className="size-3.5" style={{ color: "var(--text-tertiary)" }} />
+                    </button>
+                    <button onClick={() => void download(a.id)} aria-label={`Download ${a.filename}`}
+                      className="shrink-0">
+                      <Download className="size-3.5" style={{ color: "var(--signal)" }} />
+                    </button>
+                  </>
                 ) : (
                   <Badge variant={a.status === "failed" ? "error" : "pending"}>{a.status}</Badge>
                 )}

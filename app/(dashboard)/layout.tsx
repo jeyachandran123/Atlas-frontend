@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { Loader2, PanelLeft } from "lucide-react";
-import { IconRail } from "@/components/layout/icon-rail";
-import { ContextPanel } from "@/components/layout/context-panel";
+import { useRouter } from "next/navigation";
+import { AppSidebar } from "@/components/layout/app-sidebar";
+import { MobileNavDrawer, MobileTopBar } from "@/components/layout/mobile-nav";
+import { RouteTransition } from "@/components/layout/route-transition";
+import { AppShellSkeleton } from "@/components/ui/skeleton";
 import { CommandPalette } from "@/components/command/command-palette";
-import { ImageGalleryPanel } from "@/components/chat/image-gallery-panel";
+import { DocumentViewer } from "@/components/workspace/document-viewer";
 import { useCurrentUser } from "@/lib/hooks/use-auth";
 import { setAccessToken } from "@/lib/api/token-store";
 import { scheduleProactiveRefresh } from "@/lib/api/client";
-import { useUIStore } from "@/lib/stores/ui-store";
 
 /**
  * Bootstraps the session on every hard navigation/refresh:
@@ -56,64 +56,34 @@ function useSessionBootstrap() {
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const status = useSessionBootstrap();
-  const galleryOpen = useUIStore((s) => s.galleryOpen);
-  const setGalleryOpen = useUIStore((s) => s.setGalleryOpen);
-  const panelCollapsed = useUIStore((s) => s.sidebarCollapsed);
-  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
-  const pathname = usePathname();
 
-  // The context panel belongs to the Chat space; other spaces get a full-width stage.
-  const onChat = pathname.startsWith("/chat");
-  const showPanel = onChat && !panelCollapsed;
-
+  // One sidebar on every page — brand, spaces, chats and account — and the
+  // page beside it. Folding the sidebar (Ctrl+\) leaves its icon strip.
   return (
     <SessionGate status={status}>
-      <div className="relative flex h-screen bg-canvas">
+      {/* h-dvh, not h-screen: on a phone the address bar shrinks the visible
+          viewport, and 100vh would push the composer below the fold. */}
+      <div className="relative flex h-dvh bg-canvas">
         <CommandPalette />
-        <IconRail />
-        {showPanel && <ContextPanel />}
-        {/* Always-visible re-open affordance when the list is hidden */}
-        {onChat && panelCollapsed && (
-          <button
-            onClick={toggleSidebar}
-            aria-label="Show conversations"
-            title="Show conversations (Ctrl+\)"
-            className="icon-btn absolute left-[60px] top-3 z-20 size-8"
-            style={{
-              background: "var(--surface-2)",
-              border: "1px solid var(--border-default)",
-              boxShadow: "var(--shadow-sm)",
-            }}
-          >
-            <PanelLeft className="size-[15px]" />
-          </button>
-        )}
-        {galleryOpen && <ImageGalleryPanel onClose={() => setGalleryOpen(false)} />}
-        <main className="flex-1 overflow-hidden">{children}</main>
+        <AppSidebar />
+        <MobileNavDrawer />
+        {/* The page column: a top bar on phones, the page itself everywhere. */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <MobileTopBar />
+          <main className="min-h-0 flex-1 overflow-hidden">
+            <RouteTransition>{children}</RouteTransition>
+          </main>
+        </div>
+        {/* One file viewer for the whole app: chat, Library, workspaces. */}
+        <DocumentViewer />
       </div>
     </SessionGate>
   );
 }
 
 function SessionGate({ status, children }: { status: "loading" | "ready" | "unauthenticated"; children: ReactNode }) {
-  if (status === "loading") {
-    return (
-      <div className="flex h-screen items-center justify-center" style={{ background: "var(--color-canvas)" }}>
-        <div className="flex flex-col items-center gap-4">
-          <div
-            className="flex size-12 items-center justify-center rounded-2xl"
-            style={{
-              background: "linear-gradient(135deg, var(--accent), #6d28d9)",
-              boxShadow: "0 0 0 1px var(--accent-border), 0 8px 32px rgba(99,102,241,0.28)",
-            }}
-          >
-            <Loader2 className="size-5 animate-spin text-white" />
-          </div>
-          <p className="text-[13px] text-text-tertiary">Loading UnityWorks…</p>
-        </div>
-      </div>
-    );
-  }
+  // The app's own shape while the session is restored, not a lone spinner.
+  if (status === "loading") return <AppShellSkeleton />;
   if (status === "unauthenticated") {
     return null; // redirect already in flight
   }

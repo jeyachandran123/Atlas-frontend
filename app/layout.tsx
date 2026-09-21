@@ -1,9 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { QueryProvider } from "@/app/providers";
-// TypeScript may complain about CSS side-effect imports in some setups.
-// @ts-ignore: CSS module side-effect import
 import "./globals.css";
 
 // Self-hosted variable fonts — every weight renders crisply (no synthetic
@@ -21,8 +19,28 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "UnityWorks — AI Coding Assistant",
-  description: "A self-hosted AI coding assistant grounded in your codebase.",
+  title: "UnityWorks — AI Assistant",
+  description: "A self-hosted AI assistant grounded in your codebase.",
+};
+
+/**
+ * Without this a phone lays the page out at ~980px and scales the result down,
+ * which is why the app read as tiny rather than merely cramped on a small
+ * screen. `viewportFit: cover` is what lets the layout below claim the area
+ * behind a notch and the iOS home indicator via env(safe-area-inset-*).
+ *
+ * No `maximumScale` on purpose: capping zoom would stop anyone who needs to
+ * magnify text from doing so.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  // The on-screen keyboard shrinks the layout viewport instead of shoving the
+  // page up behind it. h-dvh then recalculates, so the composer sits on top of
+  // the keyboard and the conversation scrolls underneath — rather than the
+  // whole page sliding and taking the header with it.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

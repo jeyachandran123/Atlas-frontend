@@ -34,6 +34,12 @@ export interface UserOut {
   full_name: string | null;
   role: UserRole;
   created_at: string;
+  /** Whether email + password sign-in works for this account. */
+  has_password?: boolean;
+  /** How the account was first created: "email", "google", … */
+  auth_provider?: string | null;
+  /** Profile photo from the sign-in provider (Google); null for email-only accounts. */
+  avatar_url?: string | null;
 }
 
 export interface LoginRequest {
@@ -60,12 +66,32 @@ export interface FirebaseLoginResponse {
   is_new_user: boolean;
 }
 
+/** Sign-up. The server decides role and organisation. */
 export interface RegisterRequest {
   email: string;
   password: string;
-  full_name?: string;
-  role?: UserRole;
-  org_id: string;
+  full_name: string;
+}
+
+/** Sign-up accepted, but the address must be confirmed with an emailed code first. */
+export interface SignupVerificationPending {
+  verification: "email_otp";
+  email: string;
+  /** Seconds until the code expires. */
+  expires_in: number;
+  /** Seconds before another code can be requested. */
+  resend_after: number;
+}
+
+export interface VerifySignupRequest {
+  email: string;
+  code: string;
+}
+
+export interface SetPasswordRequest {
+  /** Required when the account already has a password. */
+  current_password?: string;
+  new_password: string;
 }
 
 export interface APIKeyOut {
@@ -164,6 +190,24 @@ export interface MessageDocumentOut {
   url: string;
 }
 
+/** A page the assistant read on the web, as its source card shows it. */
+export interface WebSourceOut {
+  url: string;
+  title: string;
+  domain: string;
+  description: string;
+  thumbnail_url: string | null;
+  favicon_url: string | null;
+  published: string | null;
+}
+
+/** A picture shown with an answer, and the page it came from. */
+export interface SourceImageOut {
+  url: string;
+  source_url: string;
+  title: string;
+}
+
 export interface MessageOut {
   id: string;
   conversation_id: string;
@@ -173,16 +217,27 @@ export interface MessageOut {
   tokens_used: number;
   images?: MessageImageOut[];
   documents?: MessageDocumentOut[];
+  /** Present only on answers that searched the web. */
+  sources?: WebSourceOut[];
+  /** The one or two pictures shown, when pictures helped the answer. */
+  source_images?: SourceImageOut[];
+  /** What was searched for, for the header line. */
+  search_query?: string | null;
   created_at: string;
 }
 
-export type AgentMode = "auto" | "code" | "business";
+/** Each maps onto a chat profile in the backend's app/llm. */
+export type AgentMode = "auto" | "code" | "business" | "reasoning" | "math" | "planning";
 
 export interface ChatRequest {
   message: string;
   conversation_id?: string;
   repo_id?: string;
   agent_mode?: AgentMode;
+  /** Omitted = the profile's default. true/false force thinking for this message. */
+  thinking?: boolean;
+  /** true = the user pressed the globe, so search without asking the model first. */
+  web_search?: boolean;
 }
 
 // Vision-enabled chat uses FormData (multipart), not JSON
@@ -204,14 +259,110 @@ export interface ChatResponse {
   context_chunks_used: number;
 }
 
+/** A file the assistant made — stored as JSON on its message (agent_used "file_artifact"). */
+export interface ChatFilePayload {
+  artifact_id?: string | null;
+  title?: string | null;
+  filename?: string | null;
+  format?: string | null;
+  size_bytes?: number | null;
+  status?: string | null;
+  error?: string | null;
+  /** attachment | conversation | knowledge — where the content came from. */
+  source?: string | null;
+  based_on?: string | null;
+  /** A short written overview of what the file contains (markdown). */
+  summary?: string | null;
+}
+
 // SSE stream event union — matches chat/router.py event_generator exactly
 export type ChatStreamEvent =
+  /** First event of every turn: where the user's message was saved. */
+  | { type: "meta"; conversation_id: string; user_message_id: string }
   | { type: "token"; content: string }
+  /** The model's thinking, streamed apart from the answer. Never saved. */
+  | { type: "reasoning"; content: string }
+  /** Progress while a file is being made. */
+  | { type: "file_stage"; stage: string; format?: string }
+  /** Progress while the web is being searched: "searching", then "reading". */
+  | { type: "search_stage"; stage: "searching" | "reading"; queries?: string[]; count?: number }
+  /** The pages found, sent before the first token so the cards lead the answer. */
+  | { type: "sources"; sources: WebSourceOut[]; images?: SourceImageOut[]; queries?: string[] }
+  /** Questions to answer before a file is made (also saved as a message). */
+  | { type: "clarify"; questions: unknown[]; intro?: string }
+  /** A finished file (also saved as a message). */
+  | ({ type: "file" } & ChatFilePayload)
   | { type: "tool_call"; tool_name: string; rationale?: string }
-  | { type: "done"; conversation_id: string; tokens_used: number }
+  | {
+      type: "done";
+      conversation_id: string;
+      tokens_used: number;
+      message_id?: string;
+      latency_ms?: number;
+      // ── Cognitive OS metadata (present only when the brain handled the turn) ──
+      brain?: boolean;
+      decision?: string;        // executive decision, e.g. "approve" | "escalate" | "ask_user"
+      authorized?: boolean;
+      escalated?: boolean;      // true => held for human review, not auto-answered
+      confidence?: number;      // 0..1 calibrated confidence
+      intent?: string;
+    }
   // conversation_id lets the client adopt the conversation even when the
   // stream fails — otherwise every retry would spawn a new conversation
   | { type: "error"; message: string; conversation_id?: string };
+
+// ── Library — mirrors app/api/v1/library/router.py ───────────────────────
+
+export type LibraryKind = "image" | "document" | "created";
+
+export interface LibraryItem {
+  id: string;
+  kind: LibraryKind;
+  name: string;
+  filename: string;
+  /** File extension, lower-case: "pdf", "xlsx", "png"… */
+  format: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: string;
+  conversation_id: string | null;
+  conversation_title: string | null;
+  width: number | null;
+  height: number | null;
+  page_count: number | null;
+  /** Created files: "chat" when made in a chat. */
+  origin: string | null;
+  /** A short-lived signed link for an image preview, when storage can mint one. */
+  preview_url: string | null;
+}
+
+export interface LibraryPage {
+  items: LibraryItem[];
+  total: number;
+  counts: Record<LibraryKind, number>;
+  limit: number;
+  offset: number;
+}
+
+/** One sheet (or Word table) as the viewer draws it — mirrors app/library/preview.py. */
+export interface PreviewSheet {
+  name: string;
+  rows: string[][];
+  total_rows: number;
+  total_cols: number;
+  truncated: boolean;
+}
+
+export type FilePreview =
+  | { type: "table"; sheets: PreviewSheet[]; sheet_count: number }
+  | {
+      type: "document";
+      blocks: Array<{ kind: "heading" | "paragraph"; text: string }>;
+      tables: PreviewSheet[];
+      truncated: boolean;
+    }
+  | { type: "too_large"; max_mb: number }
+  | { type: "unsupported" };
 
 // ── Search & Retrieval ───────────────────────────────────────────────────
 

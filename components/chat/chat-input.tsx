@@ -1,9 +1,12 @@
 "use client";
 
 import { useRef, useState, useEffect, type KeyboardEvent } from "react";
-import { ArrowUp, Square, Plus, ChevronDown, Check, Paperclip, Camera, X, FileText, Image as ImageIcon } from "lucide-react";
+import { ArrowUp, Square, Plus, ChevronDown, Check, Paperclip, Camera, X, FileText, Image as ImageIcon, Brain, Globe } from "lucide-react";
+import { toast } from "sonner";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useVoiceInput } from "@/lib/hooks/use-voice-input";
 import { RepoSelector } from "@/components/layout/repo-selector";
+import { ListeningStrip, VOICE_MESSAGES, VoiceButton } from "@/components/chat/voice-input";
 
 /* ── Agent definitions ─────────────────────────────────────────── */
 const AGENTS = [
@@ -25,9 +28,44 @@ const AGENTS = [
     description: "Hotel, ERP, POS & stock management specialist",
     dot: "#fbbf24",
   },
+  {
+    id: "reasoning",
+    label: "Reasoning",
+    description: "Deepest model, step by step — slower, for hard questions",
+    dot: "#f472b6",
+  },
+  {
+    id: "math",
+    label: "Mathematics",
+    description: "Deepest model, checked working — slower",
+    dot: "#38bdf8",
+  },
+  {
+    id: "planning",
+    label: "Agent planning",
+    description: "Breaks a goal into ordered, checkable steps",
+    dot: "#a78bfa",
+  },
 ] as const;
 
+/* Modes whose profile thinks by default (mirrors backend app/llm/profiles.py). */
+const THINKS_BY_DEFAULT = new Set<string>(["code", "reasoning", "math", "planning"]);
+
 type AgentId = (typeof AGENTS)[number]["id"];
+
+/* ── [Blanks] from quick-start templates ───────────────────────── */
+const BLANKS = /\[[^\]\n]+\]/g;
+const HAS_BLANK = /\[[^\]\n]+\]/;
+
+/** Select the next [blank] at or after `from`, wrapping to the first. True if there was one. */
+function selectBlank(el: HTMLTextAreaElement, from: number): boolean {
+  const matches = [...el.value.matchAll(BLANKS)];
+  if (matches.length === 0) return false;
+  const next = matches.find((m) => (m.index ?? 0) >= from) ?? matches[0]!;
+  const start = next.index ?? 0;
+  el.setSelectionRange(start, start + next[0].length);
+  return true;
+}
 
 /* ── Attached file type ────────────────────────────────────────── */
 interface AttachedFile {
@@ -48,6 +86,10 @@ export function ChatInput({
   const [value, setValue] = useState("");
   const agent = useChatStore((s) => s.agentMode);
   const setAgent = useChatStore((s) => s.setAgentMode);
+  const thinking = useChatStore((s) => s.thinking);
+  const setThinking = useChatStore((s) => s.setThinking);
+  const webSearch = useChatStore((s) => s.webSearch);
+  const setWebSearch = useChatStore((s) => s.setWebSearch);
   const [agentOpen, setAgentOpen] = useState(false);
   const [switchedTo, setSwitchedTo] = useState<string | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -58,8 +100,81 @@ export function ChatInput({
   const agentRef = useRef<HTMLDivElement>(null);
   const attachRef = useRef<HTMLDivElement>(null);
 
+  /* ── Voice dictation ─────────────────────────────────────────── */
+  // What was in the box when dictation began; the words heard are added after it.
+  const voiceBaseRef = useRef("");
+  // False once the user types or sends: words the browser still delivers after
+  // that must not overwrite what they did.
+  const dictatingRef = useRef(false);
+  const voice = useVoiceInput({
+    onTranscript: (heard) => {
+      if (!dictatingRef.current) return;
+      const base = voiceBaseRef.current;
+      setValue(heard ? (base ? `${base} ${heard}` : heard) : base);
+      requestAnimationFrame(resizeTextarea);
+    },
+    onError: (kind) => {
+      if (kind === "no-speech") toast(VOICE_MESSAGES[kind]);
+      else toast.error(VOICE_MESSAGES[kind]);
+    },
+  });
+  const { listening, stop: stopVoice } = voice;
+
+  function toggleVoice() {
+    if (listening) { stopVoice(); return; }
+    if (!voice.supported) { toast.error(VOICE_MESSAGES.unsupported); return; }
+    voiceBaseRef.current = value.trimEnd();
+    dictatingRef.current = true;
+    voice.start();
+    textareaRef.current?.focus();
+  }
+
+  /** Typing or sending takes over from dictation: keep what is there, stop listening. */
+  function endDictation() {
+    if (!listening) return;
+    dictatingRef.current = false;
+    stopVoice();
+  }
+
+  // Esc stops dictation wherever focus is.
+  useEffect(() => {
+    if (!listening) return;
+    const onEsc = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape") stopVoice(); };
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [listening, stopVoice]);
+
+  // A reply starting to stream ends dictation.
+  useEffect(() => {
+    if (isStreaming && listening) {
+      dictatingRef.current = false;
+      stopVoice();
+    }
+  }, [isStreaming, listening, stopVoice]);
+
   const hasContent = value.trim().length > 0 || attachedFiles.length > 0;
+  const hasBlank = HAS_BLANK.test(value);
   const selectedAgent = AGENTS.find((a) => a.id === agent)!;
+
+  /* A quick-start card fills the box — a template with [blanks], maybe a
+     file — and hands over. Nothing is sent until the user presses Enter. */
+  const draft = useChatStore((s) => s.composerDraft);
+  const setComposerDraft = useChatStore((s) => s.setComposerDraft);
+  useEffect(() => {
+    if (!draft) return;
+    setValue(draft.text);
+    if (draft.files?.length) handleFiles(draft.files);
+    setComposerDraft(null);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+      if (!selectBlank(el, 0)) el.setSelectionRange(el.value.length, el.value.length);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
 
   /* Close dropdowns on outside click */
   useEffect(() => {
@@ -118,6 +233,7 @@ export function ChatInput({
   function submit() {
     const t = value.trim();
     if ((!t && attachedFiles.length === 0) || isStreaming) return;
+    endDictation();
     onSend(t, attachedFiles.map((f) => f.file), agent);
     setValue("");
     setAttachedFiles([]);
@@ -125,17 +241,32 @@ export function ChatInput({
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); return; }
+    // Tab moves between a template's [blanks] while there are any; otherwise it is plain Tab.
+    if (e.key === "Tab" && !e.shiftKey && hasBlank) {
+      const el = e.currentTarget;
+      if (selectBlank(el, el.selectionEnd)) e.preventDefault();
+    }
   }
 
   function onTextInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    endDictation();
     setValue(e.target.value);
     const el = e.target;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }
 
-  function handleFiles(files: FileList | null) {
+  /** Grow the box to its text, keeping the newest dictated words in view. */
+  function resizeTextarea() {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function handleFiles(files: FileList | File[] | null) {
     if (!files) return;
     Array.from(files).forEach((file) => {
       const id = `${file.name}-${Date.now()}-${Math.random()}`;
@@ -170,12 +301,16 @@ export function ChatInput({
         background: "var(--surface-1)",
         border: isStreaming
           ? "1px solid var(--accent-border)"
+          : listening
+          ? "1px solid rgba(239,68,68,0.55)"
           : hasContent
           ? "1px solid var(--border-strong)"
           : "1px solid var(--border-default)",
         borderRadius: "18px",
         boxShadow: isStreaming
           ? `0 0 0 3px var(--accent-subtle), var(--shadow-lg)`
+          : listening
+          ? "0 0 0 3px rgba(239,68,68,0.14), var(--shadow-lg)"
           : hasContent
           ? "var(--shadow-lg)"
           : "var(--shadow-md)",
@@ -198,7 +333,7 @@ export function ChatInput({
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/*,.pdf,.docx,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.go,.rs,.java,.cs,.cpp,.c,.html,.css,.yaml,.yml,.toml,.sh"
+        accept="image/*,.pdf,.docx,.xlsx,.xlsm,.txt,.md,.csv,.tsv,.json,.ts,.tsx,.js,.jsx,.py,.go,.rs,.java,.cs,.cpp,.c,.html,.css,.yaml,.yml,.toml,.sh"
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
@@ -229,6 +364,20 @@ export function ChatInput({
         </div>
       )}
 
+      {/* How to fill a quick-start template */}
+      {hasBlank && !isStreaming && (
+        <div className="flex flex-wrap items-center gap-1.5 px-5 pt-3 text-[11.5px] animate-fade-in" style={{ color: "var(--text-muted)" }}>
+          Replace the <span style={{ color: "var(--accent-bright)" }}>[bracketed]</span> parts
+          <span aria-hidden>·</span>
+          <kbd className="kbd">Tab</kbd> jumps to the next one
+        </div>
+      )}
+
+      {/* Dictation in progress */}
+      {listening && voice.startedAt !== null && (
+        <ListeningStrip levelRef={voice.levelRef} startedAt={voice.startedAt} />
+      )}
+
       {/* Textarea */}
       <textarea
         ref={textareaRef}
@@ -237,12 +386,13 @@ export function ChatInput({
         onKeyDown={onKeyDown}
         disabled={disabled}
         placeholder={
+          listening ? "Listening… start speaking" :
           agent === "business" ? "Ask about hotel management, ERP, POS, inventory…" :
           agent === "code"     ? "Ask anything about your codebase…" :
           "Ask me anything — coding, history, business, pop culture…"
         }
         rows={1}
-        className="w-full resize-none bg-transparent px-5 pt-4 pb-2 text-[14px] leading-relaxed focus:outline-none disabled:opacity-40"
+        className="composer-input w-full resize-none bg-transparent px-5 pt-4 pb-2 leading-relaxed focus:outline-none disabled:opacity-40"
         style={{
           color: "var(--text-primary)",
           maxHeight: "200px",
@@ -254,8 +404,9 @@ export function ChatInput({
       {/* Bottom toolbar */}
       <div className="flex items-center justify-between px-3 pb-3 pt-1">
 
-        {/* Left — attach + agent + repo (code mode) */}
-        <div className="flex items-center gap-1">
+        {/* Left — attach + agent + repo (code mode).
+            min-w-0 lets this cluster shrink instead of pushing send off-screen. */}
+        <div className="flex min-w-0 items-center gap-1">
 
           {/* Attach dropdown */}
           <div ref={attachRef} className="relative">
@@ -309,7 +460,8 @@ export function ChatInput({
                 className="size-1.5 rounded-full"
                 style={{ background: selectedAgent.dot, boxShadow: `0 0 4px ${selectedAgent.dot}` }}
               />
-              {selectedAgent.label}
+              {/* The coloured dot identifies the mode when the word won't fit. */}
+              <span className="hidden sm:inline">{selectedAgent.label}</span>
               <ChevronDown
                 className="size-3 transition-transform duration-150"
                 style={{ transform: agentOpen ? "rotate(180deg)" : "rotate(0deg)" }}
@@ -356,6 +508,59 @@ export function ChatInput({
             )}
           </div>
 
+          {/* Thinking: Auto (the mode's default) → On → Off → Auto */}
+          {(() => {
+            const effective = thinking ?? THINKS_BY_DEFAULT.has(agent);
+            const label = thinking === null ? `Think: auto` : thinking ? "Think: on" : "Think: off";
+            const next = thinking === null ? true : thinking ? false : null;
+            return (
+              <button
+                onClick={() => setThinking(next)}
+                disabled={isStreaming}
+                title={
+                  thinking === null
+                    ? `Following ${selectedAgent.label}'s default (${effective ? "thinks first" : "answers directly"}). Click to force on.`
+                    : thinking
+                    ? "The model reasons before answering — slower, better on hard problems. Click to force off."
+                    : "The model answers directly — fastest. Click to return to the mode's default."
+                }
+                className="menu-trigger flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium disabled:opacity-50"
+                style={{
+                  color: effective ? "var(--accent-bright)" : "var(--text-tertiary)",
+                  background: thinking === true ? "var(--accent-subtle)" : undefined,
+                }}
+                aria-label={label}
+              >
+                <Brain className="size-3.5" />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            );
+          })()}
+
+          {/* The globe: off means the model decides for itself whether a
+              question needs the web, which is the normal case. On forces a
+              search for the next message — the escape hatch for when it
+              decides wrong. */}
+          <button
+            onClick={() => setWebSearch(!webSearch)}
+            disabled={isStreaming}
+            title={
+              webSearch
+                ? "This message will search the web. Click to leave it to the assistant."
+                : "The assistant searches when it needs to. Click to search on this message whatever it thinks."
+            }
+            className="menu-trigger flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium disabled:opacity-50"
+            style={{
+              color: webSearch ? "var(--accent-bright)" : "var(--text-tertiary)",
+              background: webSearch ? "var(--accent-subtle)" : undefined,
+            }}
+            aria-label={webSearch ? "Web search on" : "Web search auto"}
+            aria-pressed={webSearch}
+          >
+            <Globe className="size-3.5" />
+            <span className="hidden sm:inline">{webSearch ? "Web: on" : "Web"}</span>
+          </button>
+
           {/* Repo selector — code mode only, after agent selector */}
           {agent === "code" && (
             <>
@@ -365,8 +570,8 @@ export function ChatInput({
           )}
         </div>
 
-        {/* Right — send / stop */}
-        <div className="flex items-center gap-2">
+        {/* Right — send / stop. Never shrinks: sending is the point. */}
+        <div className="flex shrink-0 items-center gap-2">
           {isStreaming ? (
             <button
               onClick={onStop}
@@ -380,23 +585,31 @@ export function ChatInput({
               <Square className="size-3.5 fill-current" />
             </button>
           ) : (
-            <button
-              onClick={submit}
-              disabled={!hasContent || disabled}
-              aria-label="Send message"
-              className="send-btn flex size-8 items-center justify-center rounded-xl disabled:cursor-not-allowed disabled:opacity-25"
-              style={hasContent && !disabled ? {
-                background: "var(--accent-gradient)",
-                boxShadow: "var(--shadow-accent-sm), inset 0 1px 0 rgba(255,255,255,0.15)",
-                color: "#fff",
-              } : {
-                background: "var(--surface-3)",
-                border: "1px solid var(--border-default)",
-                color: "var(--text-muted)",
-              }}
-            >
-              <ArrowUp className="size-4" />
-            </button>
+            <>
+              <VoiceButton
+                supported={voice.supported}
+                listening={listening}
+                disabled={disabled}
+                onToggle={toggleVoice}
+              />
+              <button
+                onClick={submit}
+                disabled={!hasContent || disabled}
+                aria-label="Send message"
+                className="send-btn flex size-8 items-center justify-center rounded-xl disabled:cursor-not-allowed disabled:opacity-25"
+                style={hasContent && !disabled ? {
+                  background: "var(--accent-gradient)",
+                  boxShadow: "var(--shadow-accent-sm), inset 0 1px 0 rgba(255,255,255,0.15)",
+                  color: "#fff",
+                } : {
+                  background: "var(--surface-3)",
+                  border: "1px solid var(--border-default)",
+                  color: "var(--text-muted)",
+                }}
+              >
+                <ArrowUp className="size-4" />
+              </button>
+            </>
           )}
         </div>
       </div>

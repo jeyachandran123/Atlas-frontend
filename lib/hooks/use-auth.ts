@@ -4,7 +4,9 @@ import { authApi } from "@/lib/api/auth";
 import { setAccessToken, clearSession, setCurrentUserId } from "@/lib/api/token-store";
 import { scheduleProactiveRefresh } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/stores/auth-store";
-import type { LoginRequest, RegisterRequest, FirebaseLoginRequest } from "@/types/api";
+import type {
+  LoginRequest, RegisterRequest, FirebaseLoginRequest, SetPasswordRequest, VerifySignupRequest,
+} from "@/types/api";
 
 export const authKeys = {
   me: ["auth", "me"] as const,
@@ -99,6 +101,28 @@ export function useFirebaseLogin() {
 export function useRegister() {
   return useMutation({
     mutationFn: (data: RegisterRequest) => authApi.register(data),
+  });
+}
+
+/** Confirm a sign-up with the code that was emailed; creates the account. */
+export function useVerifySignup() {
+  return useMutation({
+    mutationFn: (data: VerifySignupRequest) => authApi.verifySignup(data),
+  });
+}
+
+export function useResendSignupCode() {
+  return useMutation({
+    mutationFn: (email: string) => authApi.resendSignupCode(email),
+  });
+}
+
+/** Add or change this account's password; "who am I" is refreshed after. */
+export function useSetPassword() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: SetPasswordRequest) => authApi.setPassword(data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: authKeys.me }),
   });
 }
 
