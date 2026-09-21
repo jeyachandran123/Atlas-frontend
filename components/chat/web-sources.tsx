@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Globe, Loader2, ChevronDown } from "lucide-react";
+import { Globe, Loader2, ChevronDown, Play } from "lucide-react";
 import type { SourceImageOut, WebSourceOut } from "@/types/api";
 
 /**
@@ -113,6 +113,78 @@ function Picture({ image, wide }: { image: SourceImageOut; wide: boolean }) {
   );
 }
 
+/** The id of a YouTube video URL. Videos only ever come from YouTube: a
+ *  result from any other site is a link, never a player. */
+const YOUTUBE_ID =
+  /^https?:\/\/(?:(?:www|m)\.)?(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])/;
+
+export function youtubeId(url: string): string | null {
+  return YOUTUBE_ID.exec(url.trim())?.[1] ?? null;
+}
+
+const MAX_VIDEOS = 4;
+
+function Video({ source, id }: { source: WebSourceOut; id: string }) {
+  // The player loads only when asked for: four embedded players would fetch
+  // several megabytes of YouTube before the reader has chosen one.
+  const [playing, setPlaying] = useState(false);
+  const [thumbFailed, setThumbFailed] = useState(false);
+
+  return (
+    <div
+      className="relative w-[260px] shrink-0 overflow-hidden rounded-2xl sm:w-[320px]"
+      style={{ border: "1px solid var(--border-default)", background: "var(--surface-2)" }}
+    >
+      <div className="relative aspect-video w-full">
+        {playing ? (
+          <iframe
+            // The privacy-enhanced domain sets no cookies until the video
+            // plays, and YouTube itself refuses age-restricted videos in an
+            // embed.
+            src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&modestbranding=1`}
+            title={source.title}
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+            className="absolute inset-0 size-full"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPlaying(true)}
+            aria-label={`Play ${source.title}`}
+            className="group/vid absolute inset-0 size-full"
+          >
+            {!thumbFailed && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`}
+                alt=""
+                loading="lazy"
+                className="size-full object-cover transition-transform duration-300 group-hover/vid:scale-[1.04]"
+                onError={() => setThumbFailed(true)}
+              />
+            )}
+            <span className="absolute inset-0 flex items-center justify-center">
+              <span className="flex size-12 items-center justify-center rounded-full bg-black/65 text-white shadow-lg transition-transform duration-200 group-hover/vid:scale-110">
+                <Play className="ml-0.5 size-5 fill-current" />
+              </span>
+            </span>
+            <span
+              className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end p-2.5 pt-8 text-left"
+              style={{ background: "linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0))" }}
+            >
+              <span className="line-clamp-2 text-[11.5px] font-medium leading-snug text-white/95">
+                {source.title}
+              </span>
+            </span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function WebSources({
   sources,
   images = [],
@@ -128,6 +200,16 @@ export function WebSources({
   // outside the drawer and stay visible.
   const [open, setOpen] = useState(false);
   if (!sources.length) return null;
+
+  const seenIds = new Set<string>();
+  const videos: { source: WebSourceOut; id: string }[] = [];
+  for (const source of sources) {
+    const id = youtubeId(source.url);
+    if (id && !seenIds.has(id) && videos.length < MAX_VIDEOS) {
+      seenIds.add(id);
+      videos.push({ source, id });
+    }
+  }
 
   return (
     <div className="mb-3 animate-fade-in-up">
@@ -162,6 +244,14 @@ export function WebSources({
             // One picture gets the room two would have taken, instead of
             // sitting small against an empty half-row.
             <Picture key={image.url} image={image} wide={images.length === 1} />
+          ))}
+        </div>
+      )}
+
+      {videos.length > 0 && (
+        <div className="mb-2.5 flex gap-2.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {videos.map(({ source, id }) => (
+            <Video key={id} source={source} id={id} />
           ))}
         </div>
       )}
