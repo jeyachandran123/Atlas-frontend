@@ -206,11 +206,13 @@ const components: Components = {
 
 /** The same renderers, with citation markers turned into source chips. */
 function citingComponents(sources: WebSourceOut[]): Components {
-  const decorate =
-    (Tag: "p" | "li" | "td" | "th" | "h1" | "h2" | "h3" | "h4" | "blockquote") =>
-    ({ children, ...rest }: { children?: ReactNode }) => (
+  const decorate = (Tag: "p" | "li" | "td" | "th" | "h1" | "h2" | "h3" | "h4" | "blockquote") => {
+    const Cited = ({ children, ...rest }: { children?: ReactNode }) => (
       <Tag {...rest}>{withCitations(children, sources)}</Tag>
     );
+    Cited.displayName = `Cited(${Tag})`;
+    return Cited;
+  };
   return {
     ...components,
     p: decorate("p"),
