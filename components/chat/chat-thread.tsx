@@ -81,6 +81,14 @@ export function ChatThread() {
   // or failed turn saves no reply). Both are decided in the same render the
   // saved copy appears in, so the two never show together.
   const lastMessage = messages[messages.length - 1];
+  /** The newest saved prompt — the pin's anchor once the optimistic copy of it
+   *  has been replaced. */
+  const lastUserId = (() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i]!.role === "user") return messages[i]!.id;
+    }
+    return undefined;
+  })();
   const handingOver =
     !isActiveStream && !streamError && streamEndedAt !== null
     && streamingConversationId === activeConversationId
@@ -162,6 +170,14 @@ export function ChatThread() {
   // Sending pins your message to the top and lets the reply grow underneath,
   // instead of keeping the view glued to the bottom edge.
   const [pinned, setPinned] = useState(false);
+  /** Whether the run-off is being kept sized for the newest prompt. Set by a
+   *  send and kept after the pin ends — the run-off must go on shrinking as
+   *  the reply grows even once the reader has taken the scroll, or whatever
+   *  height it had at that moment is left behind as a dead gap under the
+   *  answer. */
+  const [runOffLive, setRunOffLive] = useState(false);
+  const pinnedRef = useRef(false);
+  pinnedRef.current = pinned;
   /** The run-off space under the newest prompt, sized straight on the node.
    *
    *  It was React state with a height transition, and both were wrong: the
@@ -171,6 +187,8 @@ export function ChatThread() {
    *  prompt stopped short — the same bug the fixed 60dvh had, wearing a
    *  measurement. Writing the height here applies it in the same frame. */
   const spacerRef = useRef<HTMLDivElement>(null);
+  /** The message list itself, watched for any change in height. */
+  const contentRef = useRef<HTMLDivElement>(null);
   const [activePromptId, setActivePromptId] = useState<string | null>(null);
   const [flashId, setFlashId] = useState<string | null>(null);
 
@@ -203,26 +221,26 @@ export function ChatThread() {
     }
   }
 
-  /** Close the run-off and stop holding the prompt at the top.
-   *
-   *  The height goes with the pin, always. Cancelling one without the other
-   *  left an empty screen's worth of run-off under a live reply: following the
-   *  bottom then scrolled to the bottom of the gap instead of to the text. */
-  const releasePin = useCallback(() => {
-    if (spacerRef.current) spacerRef.current.style.height = "";
-    setPinned(false);
-  }, []);
+  /** Stop holding the prompt at the top. The run-off is NOT frozen here: the
+   *  sizing effect keeps shrinking it as the reply grows, so it only ever
+   *  covers screen the reply has not reached yet and reaches zero once the
+   *  reply fills the view. Freezing it was the half-screen gap under a
+   *  finished answer. */
+  const endPin = useCallback(() => setPinned(false), []);
 
   // A wheel or touch upwards is intent, and it is known before the scroll
   // event lands — acting on it here means the next streamed token cannot win
-  // a race against the reader's own hand.
+  // a race against the reader's own hand. Scrolling down is not a reason to
+  // let go of the prompt.
   function handleWheel(e: React.WheelEvent) {
-    if (e.deltaY < 0) followRef.current = false;
-    releasePin();
+    if (e.deltaY < 0) {
+      followRef.current = false;
+      endPin();
+    }
   }
   function handleTouchMove() {
     followRef.current = false;
-    releasePin();
+    endPin();
   }
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
@@ -255,6 +273,7 @@ export function ChatThread() {
     // Measured fresh for this send: what the last one needed says nothing
     // about what this one needs.
     if (spacerRef.current) spacerRef.current.style.height = "";
+    setRunOffLive(true);
     setPinned(true);
   }
 
@@ -276,6 +295,12 @@ export function ChatThread() {
     followRef.current = true;
     setHasNewBelow(false);
     setAtBottom(true);
+    // A conversation opened from the sidebar gets no run-off. A brand-new chat
+    // receives its id mid-send, while the pin is still holding — keep that one.
+    if (!pinnedRef.current) {
+      setRunOffLive(false);
+      if (spacerRef.current) spacerRef.current.style.height = "";
+    }
   }, [activeConversationId]);
 
   // Follow new content — instantly, not smoothly: a smooth scroll started on
@@ -285,56 +310,83 @@ export function ChatThread() {
     const el = scrollRef.current;
     if (!el) return;
     if (followRef.current) {
-      // Following the bottom and holding a prompt at the top are the same
-      // thing done two ways, and they cannot both be true: the run-off would
-      // be scrolled to instead of the text, which is the empty screen under a
-      // streaming reply. Following wins here, so the pin and its height go —
-      // whichever path turned following back on, including a scrollbar drag
-      // that no wheel or touch handler ever sees.
-      if (spacerRef.current?.style.height) spacerRef.current.style.height = "";
+      // Following the bottom and holding a prompt at the top cannot both be
+      // true; following wins here. The run-off stays — while it is sized
+      // correctly the bottom of the page IS the pinned position, so this
+      // scroll lands where the prompt already was and nothing moves.
       if (pinned) setPinned(false);
       el.scrollTop = el.scrollHeight;
       return;
     }
-    if (pinned) {
-      // The prompt is held at the top and the reply fills the screen beneath
-      // it. The run-off underneath is what makes that possible, and it SHRINKS
-      // by exactly what the reply grows — so the scrollable height never
-      // changes, and neither does the prompt's position.
-      //
-      // Removing it instead, once the reply was long enough, is what threw the
-      // whole view down to the middle mid-stream: the height vanished, the
-      // browser clamped the scroll, and everything slid. Nothing is removed
-      // here. When the reply finally outgrows the screen the run-off is
-      // already zero, so following the bottom continues from exactly where
-      // the text is, with nothing to jump.
-      const node = optimisticUserMessage
-        ? el.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(optimisticUserMessage.id)}"]`)
-        : null;
-      const spacer = spacerRef.current;
-      if (!node || !spacer) return;
+    // While pinned, the run-off effect below owns the scroll position.
+    if (pinned) return;
+    if (isActiveStream || activeStreamContent) setHasNewBelow(true);
+  }, [messages.length, activeStreamContent, streamingReasoning, isActiveStream,
+      showOptimistic, pinned]);
+
+  /**
+   * Hold the newest prompt at the top while its reply fills the screen.
+   *
+   * The run-off underneath shrinks by exactly what the reply grows, so the
+   * scrollable height never changes and the prompt cannot move. Removing it
+   * outright once the reply was long enough is what threw the view to the
+   * middle: the height vanished, the browser clamped the scroll, everything
+   * slid. Nothing is removed here — by the time the reply outgrows the screen
+   * the run-off is already zero, so following the bottom carries on from where
+   * the text is.
+   *
+   * It is driven by a ResizeObserver rather than by React dependencies,
+   * because the things that change the height are not all state this component
+   * watches: streamed text, the sources block arriving, an image finishing its
+   * load, and the optimistic prompt being swapped for the saved one. Every
+   * dependency list I wrote missed one of them, and a missed change is a jump.
+   */
+  //
+  // The run-off is sized on every resize for as long as it is live — pinned or
+  // not — so it is never taller than the screen the reply has yet to fill.
+  // Only the scroll-holding depends on the pin.
+  useEffect(() => {
+    if (!runOffLive) return;
+    const el = scrollRef.current;
+    const spacer = spacerRef.current;
+    const content = contentRef.current;
+    if (!el || !spacer || !content) return;
+
+    const apply = () => {
+      // The last anchor: the optimistic prompt while it exists, the saved one
+      // once it has taken over.
+      const anchors = el.querySelectorAll<HTMLElement>("[data-pin-anchor]");
+      const node = anchors[anchors.length - 1];
+      if (!node) return;
 
       const promptTop =
         node.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
       const replyHeight = el.scrollHeight - spacer.offsetHeight - promptTop;
       const runOff = el.clientHeight - PIN_TOP_GAP_PX - replyHeight;
 
-      if (runOff > 0) {
-        spacer.style.height = `${Math.ceil(runOff)}px`;
-        el.scrollTop = Math.max(0, promptTop - PIN_TOP_GAP_PX);
-      } else {
-        // The reply is taller than the screen: it scrolls from here like any
-        // other content, and the prompt leaves the top the way it should.
-        spacer.style.height = "";
-        setPinned(false);
-        followRef.current = true;
+      spacer.style.height = runOff > 0 ? `${Math.ceil(runOff)}px` : "";
+
+      if (pinnedRef.current) {
+        if (runOff > 0) {
+          el.scrollTop = Math.max(0, promptTop - PIN_TOP_GAP_PX);
+        } else {
+          // The reply has reached the composer: from here the stream runs on
+          // down the screen with the view following it.
+          pinnedRef.current = false;
+          setPinned(false);
+          followRef.current = true;
+          el.scrollTop = el.scrollHeight;
+        }
+      } else if (followRef.current) {
         el.scrollTop = el.scrollHeight;
       }
-      return;
-    }
-    if (isActiveStream || activeStreamContent) setHasNewBelow(true);
-  }, [messages.length, activeStreamContent, streamingReasoning, isActiveStream,
-      showOptimistic, pinned, optimisticUserMessage]);
+    };
+
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [runOffLive]);
 
   // There is deliberately no second effect placing the prompt. One did the
   // first placement on a frame callback while the effect above adjusted the
@@ -342,14 +394,12 @@ export function ChatThread() {
   // different measurements — which is the jump. Placement and growth are one
   // rule now, applied in one place.
 
-  // The reply has landed: release the pin so normal following resumes, and
-  // close the spacer so a finished conversation has no dead space under it.
-  useEffect(() => {
-    // Not conditional on `pinned`: scrolling by hand during a reply cancels
-    // the pin, and the run-off would then stay open as a dead gap under the
-    // finished conversation.
-    if (!isActiveStream && streamEndedAt !== null) releasePin();
-  }, [isActiveStream, streamEndedAt, releasePin]);
+  // A finished reply deliberately releases nothing. Closing the run-off the
+  // moment a reply ended was the jump: its text was on screen, the page shrank
+  // under it, and the whole conversation slid down. A short reply is meant to
+  // sit with its prompt at the top and the rest of the screen empty — that is
+  // what the run-off is. The pin ends itself when a reply outgrows the screen,
+  // or when the reader scrolls.
 
   useEffect(() => { updateActivePrompt(); }, [updateActivePrompt]);
   useEffect(() => () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); }, []);
@@ -429,12 +479,17 @@ export function ChatThread() {
               <ChatMessagesSkeleton />
             </div>
           ) : (
-            <div className="mx-auto max-w-[768px] px-4 py-6 sm:px-6 sm:py-8">
+            <div ref={contentRef} className="mx-auto max-w-[768px] px-4 py-6 sm:px-6 sm:py-8">
               <div className="flex flex-col gap-7">
                 {messages.map((m, i) => (
                   <div
                     key={m.id}
                     data-msg-id={m.id}
+                    // The pin follows this marker rather than an id, because the
+                    // message it holds is replaced mid-reply: the optimistic
+                    // copy gives way to the saved one under a different id, and
+                    // an id-based lookup stops finding anything at that moment.
+                    data-pin-anchor={m.role === "user" && m.id === lastUserId ? "" : undefined}
                     className="-mx-3 rounded-2xl px-3 py-1 transition-[box-shadow,background-color] duration-700 ease-out"
                     style={flashId === m.id ? {
                       background: "var(--accent-subtle)",
@@ -465,7 +520,7 @@ export function ChatThread() {
                     // Wrapped like the saved messages above: the pin finds it by
                     // data-msg-id, and without the wrapper the message you just
                     // sent is the one thing on screen that cannot be scrolled to.
-                    <div key={optimisticUserMessage!.id} data-msg-id={optimisticUserMessage!.id} className="-mx-3 px-3 py-1">
+                    <div key={optimisticUserMessage!.id} data-msg-id={optimisticUserMessage!.id} data-pin-anchor="" className="-mx-3 px-3 py-1">
                       <MessageBubble message={optimisticUserMessage!} />
                     </div>
                   )}
