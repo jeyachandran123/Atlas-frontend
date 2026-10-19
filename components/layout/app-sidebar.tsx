@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   BookOpenText, Check, ChevronsUpDown, FolderGit2, KeyRound, Library, LogOut, Monitor, Moon,
-  PanelLeftClose, PanelLeftOpen, Search, SearchCode, Settings, SquarePen, Sun, X,
+  PanelLeftClose, PanelLeftOpen, Search, SearchCode, Settings, Sparkles, SquarePen, Sun, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
@@ -25,6 +25,7 @@ const SPACES: Array<{ href: string; label: string; Icon: React.ElementType; matc
   { href: "/w", label: "Workspace", Icon: BookOpenText, match: ["/w", "/knowledge"] },
   { href: "/repos", label: "Knowledge", Icon: FolderGit2, match: ["/repos"] },
   { href: "/search", label: "Code search", Icon: SearchCode, match: ["/search"] },
+  { href: "/skills", label: "Skills", Icon: Sparkles, match: ["/skills"] },
   { href: "/settings/keys", label: "API keys", Icon: KeyRound, match: ["/settings/keys"] },
 ];
 
