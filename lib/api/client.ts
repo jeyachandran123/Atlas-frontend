@@ -1,5 +1,5 @@
 import { ApiError, type ErrorResponse } from "@/types/api";
-import { getAccessToken, setAccessToken } from "@/lib/api/token-store";
+import { clearSession, getAccessToken, setAccessToken } from "@/lib/api/token-store";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/backend";
 
@@ -25,7 +25,7 @@ async function doFetch(path: string, options: RequestOptions): Promise<Response>
 // Single in-flight refresh promise — all concurrent 401s share one refresh call
 let _refreshing: Promise<string | null> | null = null;
 
-async function refreshAccessToken(): Promise<string | null> {
+export async function refreshAccessToken(): Promise<string | null> {
   if (_refreshing) return _refreshing;
   _refreshing = fetch("/api/auth/refresh", { method: "POST" })
     .then((r) => (r.ok ? r.json() : null))
@@ -51,6 +51,29 @@ export function scheduleProactiveRefresh(expiresInMs: number = 15 * 60 * 1000) {
   }, refreshAt);
 }
 
+let _signingOut = false;
+
+/**
+ * The session is gone for good (the refresh token was refused): go to sign-in.
+ *
+ * Done here, once, rather than left to each caller - most callers (Retry,
+ * Edit, the sidebar's queries) have no handling for it, so the error reached
+ * the page as a crash instead of as "please sign in". The promise it returns
+ * never settles: the page is being replaced, and resolving or rejecting would
+ * only let the caller act on, or report, a request that no longer matters.
+ */
+export function sessionExpired(): Promise<never> {
+  if (typeof window === "undefined") {
+    return Promise.reject(new ApiError("Session expired. Please sign in again.", 401));
+  }
+  if (!_signingOut) {
+    _signingOut = true;
+    clearSession();
+    window.location.assign("/login");
+  }
+  return new Promise<never>(() => {});
+}
+
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   let response = await doFetch(path, options);
 
@@ -60,7 +83,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     if (newToken) {
       response = await doFetch(path, options);
     } else {
-      throw new ApiError("Session expired. Please sign in again.", 401);
+      return sessionExpired();
     }
   }
 
