@@ -238,6 +238,8 @@ export interface ChatRequest {
   thinking?: boolean;
   /** true = the user pressed the globe, so search without asking the model first. */
   web_search?: boolean;
+  /** Skills picked in the composer's + menu. Used exactly as given for this message. */
+  skills?: string[];
 }
 
 // Vision-enabled chat uses FormData (multipart), not JSON

@@ -56,6 +56,10 @@ interface ChatState {
   /** The globe: true makes the next message search whatever the model thinks. */
   webSearch: boolean;
   setWebSearch: (on: boolean) => void;
+  /** Skills picked in the + menu (slugs). Used for every message until unticked. */
+  selectedSkills: string[];
+  toggleSkill: (slug: string) => void;
+  clearSkills: () => void;
   /** Text (and files) a quick-start card puts in the prompt box — taken once by ChatInput. */
   composerDraft: ComposerDraft | null;
   /**
@@ -113,6 +117,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamingSourceImages: [],
   streamingSearchQuery: null,
   webSearch: false,
+  selectedSkills: [],
   composerDraft: null,
   streamEndedAt: null,
   messageImages: {},
@@ -132,6 +137,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setThinking: (value) => set({ thinking: value }),
 
   setWebSearch: (on) => set({ webSearch: on }),
+  toggleSkill: (slug) =>
+    set((s) => ({
+      selectedSkills: s.selectedSkills.includes(slug)
+        ? s.selectedSkills.filter((x) => x !== slug)
+        : [...s.selectedSkills, slug].slice(0, 5),   // the server accepts at most 5
+    })),
+  clearSkills: () => set({ selectedSkills: [] }),
 
   startStream: (controller, userMessage, conversationId) =>
     set({

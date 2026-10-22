@@ -1,9 +1,11 @@
 "use client";
 
 import { useRef, useState, useEffect, type KeyboardEvent } from "react";
-import { ArrowUp, Square, Plus, ChevronDown, Check, Paperclip, Camera, X, FileText, Image as ImageIcon, Brain, Globe } from "lucide-react";
+import { ArrowUp, Square, Plus, ChevronDown, ChevronRight, Check, Paperclip, Camera, X, FileText, Image as ImageIcon, Brain, Globe, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useSkills } from "@/lib/hooks/use-skills";
+import { ComposerChip, SkillsPicker } from "@/components/chat/skills-picker";
 import { useVoiceInput } from "@/lib/hooks/use-voice-input";
 import { RepoSelector } from "@/components/layout/repo-selector";
 import { ListeningStrip, VOICE_MESSAGES, VoiceButton } from "@/components/chat/voice-input";
@@ -90,6 +92,13 @@ export function ChatInput({
   const setThinking = useChatStore((s) => s.setThinking);
   const webSearch = useChatStore((s) => s.webSearch);
   const setWebSearch = useChatStore((s) => s.setWebSearch);
+  const selectedSkills = useChatStore((s) => s.selectedSkills);
+  const toggleSkill = useChatStore((s) => s.toggleSkill);
+  // isError: the server has skills turned off (404), so the menu has no Skills row.
+  const { data: skillList, isError: skillsOff } = useSkills();
+  // Everything the user can pick: their own skills first, then the built-in ones.
+  const pickable = skillList ? [...skillList.installed, ...skillList.system] : [];
+  const [plusView, setPlusView] = useState<"main" | "skills">("main");
   const [agentOpen, setAgentOpen] = useState(false);
   const [switchedTo, setSwitchedTo] = useState<string | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -347,6 +356,28 @@ export function ChatInput({
         </div>
       )}
 
+      {/* What is switched on for the next messages: web search and picked skills */}
+      {(webSearch || selectedSkills.length > 0) && (
+        <div className="flex flex-wrap gap-2 px-4 pt-3">
+          {webSearch && (
+            <ComposerChip
+              icon={<Globe className="size-3" />}
+              label="Web search"
+              onRemove={() => setWebSearch(false)}
+              disabled={isStreaming}
+            />
+          )}
+          {selectedSkills.map((slug) => (
+            <ComposerChip
+              key={slug}
+              icon={<Sparkles className="size-3" />}
+              label={pickable.find((s) => s.slug === slug)?.name ?? slug}
+              onRemove={() => toggleSkill(slug)}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Mode switch toast */}
       {switchedTo && (
         <div
@@ -411,7 +442,7 @@ export function ChatInput({
           {/* Attach dropdown */}
           <div ref={attachRef} className="relative">
             <button
-              onClick={() => { setAttachOpen((o) => !o); setAgentOpen(false); }}
+              onClick={() => { setAttachOpen((o) => !o); setAgentOpen(false); setPlusView("main"); }}
               className={`icon-btn size-8 rounded-lg ${attachOpen ? "open" : ""}`}
               aria-label="Add files or photos"
               aria-expanded={attachOpen}
@@ -423,7 +454,7 @@ export function ChatInput({
             {/* Attach menu */}
             {attachOpen && (
               <div
-                className="absolute bottom-full left-0 mb-2 w-[260px] overflow-hidden rounded-xl animate-scale-up"
+                className="absolute bottom-full left-0 mb-2 w-[300px] overflow-hidden rounded-xl animate-scale-up"
                 style={{
                   background: "var(--surface-2)",
                   border: "1px solid var(--border-strong)",
@@ -431,20 +462,53 @@ export function ChatInput({
                   transformOrigin: "bottom left",
                 }}
               >
-                <AttachMenuItem
-                  icon={<Paperclip className="size-4" />}
-                  label="Add files or photos"
-                  shortcut="Ctrl+U"
-                  onClick={() => fileInputRef.current?.click()}
-                />
-                <AttachMenuItem
-                  icon={<Camera className="size-4" />}
-                  label="Take a screenshot"
-                  onClick={() => {
-                    // placeholder — screenshot capture hook goes here
-                    setAttachOpen(false);
-                  }}
-                />
+                {plusView === "skills" ? (
+                  <SkillsPicker
+                    skills={pickable}
+                    loading={!skillList}
+                    selected={selectedSkills}
+                    onToggle={toggleSkill}
+                    onBack={() => setPlusView("main")}
+                    onNavigate={() => setAttachOpen(false)}
+                  />
+                ) : (
+                  <>
+                    <AttachMenuItem
+                      icon={<Paperclip className="size-4" />}
+                      label="Add files or photos"
+                      shortcut="Ctrl+U"
+                      onClick={() => fileInputRef.current?.click()}
+                    />
+                    <AttachMenuItem
+                      icon={<Camera className="size-4" />}
+                      label="Take a screenshot"
+                      onClick={() => {
+                        // placeholder — screenshot capture hook goes here
+                        setAttachOpen(false);
+                      }}
+                    />
+                    {/* The globe, moved here from the toolbar. Off means the model decides for
+                        itself whether a question needs the web (the normal case); on forces a
+                        search for the next message — the escape hatch for when it decides wrong. */}
+                    <AttachMenuItem
+                      icon={<Globe className="size-4" />}
+                      label="Web search"
+                      hint={webSearch ? "On for your messages" : "Search the web for answers"}
+                      disabled={isStreaming}
+                      trailing={webSearch ? <Check className="size-4" style={{ color: "var(--accent-bright)" }} /> : undefined}
+                      onClick={() => { setWebSearch(!webSearch); setAttachOpen(false); }}
+                    />
+                    {!skillsOff && (
+                      <AttachMenuItem
+                        icon={<Sparkles className="size-4" />}
+                        label="Skills"
+                        hint={selectedSkills.length > 0 ? selectedSkills.length + " selected" : "Pick the skills to use"}
+                        trailing={<ChevronRight className="size-4" style={{ color: "var(--text-muted)" }} />}
+                        onClick={() => setPlusView("skills")}
+                      />
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -537,30 +601,6 @@ export function ChatInput({
             );
           })()}
 
-          {/* The globe: off means the model decides for itself whether a
-              question needs the web, which is the normal case. On forces a
-              search for the next message — the escape hatch for when it
-              decides wrong. */}
-          <button
-            onClick={() => setWebSearch(!webSearch)}
-            disabled={isStreaming}
-            title={
-              webSearch
-                ? "This message will search the web. Click to leave it to the assistant."
-                : "The assistant searches when it needs to. Click to search on this message whatever it thinks."
-            }
-            className="menu-trigger flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium disabled:opacity-50"
-            style={{
-              color: webSearch ? "var(--accent-bright)" : "var(--text-tertiary)",
-              background: webSearch ? "var(--accent-subtle)" : undefined,
-            }}
-            aria-label={webSearch ? "Web search on" : "Web search auto"}
-            aria-pressed={webSearch}
-          >
-            <Globe className="size-3.5" />
-            <span className="hidden sm:inline">{webSearch ? "Web: on" : "Web"}</span>
-          </button>
-
           {/* Repo selector — code mode only, after agent selector */}
           {agent === "code" && (
             <>
@@ -619,21 +659,33 @@ export function ChatInput({
 
 /* ── Attach menu item ───────────────────────────────────────────── */
 function AttachMenuItem({
-  icon, label, shortcut, onClick,
+  icon, label, shortcut, hint, trailing, disabled, onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   shortcut?: string;
+  /** A line of explanation under the label. */
+  hint?: string;
+  /** Replaces the shortcut at the right edge: a tick, an arrow, a count. */
+  trailing?: React.ReactNode;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      className="menu-item flex w-full items-center gap-3 px-4 py-3 text-left"
+      disabled={disabled}
+      className="menu-item flex w-full items-center gap-3 px-4 py-3 text-left disabled:opacity-50"
     >
       <span style={{ color: "var(--text-tertiary)" }}>{icon}</span>
-      <span className="flex-1 text-[13px] font-medium">{label}</span>
-      {shortcut && (
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13px] font-medium">{label}</span>
+        {hint && (
+          <span className="block truncate text-[11px]" style={{ color: "var(--text-muted)" }}>{hint}</span>
+        )}
+      </span>
+      {trailing}
+      {shortcut && !trailing && (
         <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{shortcut}</span>
       )}
     </button>

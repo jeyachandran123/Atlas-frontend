@@ -200,6 +200,7 @@ export function useStreamChat() {
       // changed since this callback was created.
       const thinking = useChatStore.getState().thinking;
       const webSearch = useChatStore.getState().webSearch;
+      const selectedSkills = useChatStore.getState().selectedSkills;
 
       const payload: ChatRequest = {
         message,
@@ -208,6 +209,7 @@ export function useStreamChat() {
         agent_mode: agentMode as AgentMode,
         ...(thinking === null ? {} : { thinking }),
         ...(webSearch ? { web_search: true } : {}),
+        ...(selectedSkills.length > 0 ? { skills: selectedSkills } : {}),
       };
 
       const controller = streamChatMessage(
