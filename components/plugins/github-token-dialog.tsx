@@ -54,6 +54,10 @@ export function GithubTokenDialog({
             .
           </li>
           <li>
+            Under <b>Repository access</b> choose <b>All repositories</b>. The default, public
+            repositories only, hides your private ones.
+          </li>
+          <li>
             Give it <b>read-only</b> access (Pull requests, Issues and Metadata: Read).
           </li>
           <li>Create it, copy the token, and paste it below.</li>
