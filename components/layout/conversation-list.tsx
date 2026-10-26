@@ -52,7 +52,7 @@ function groupConversations(convs: ConversationOut[]): ConvGroup[] {
 }
 
 /** Scrolled this far down the list, offer a way back to the recent chats. */
-const SHOW_RECENT_AFTER_PX = 400;
+const SHOW_RECENT_AFTER_PX = 120;
 /** Start loading the next page this close to the end of the list. */
 const LOAD_MORE_WITHIN_PX = 120;
 
@@ -124,6 +124,19 @@ export function ConversationList() {
 
   const groups = groupConversations(conversations);
 
+  // A new chat lands at the top. If the list is scrolled down it would arrive out of
+  // sight, so the list goes back to the top when the newest chat changes. (Not on the
+  // first load: the list is already at the top, and a refresh of the same data keeps
+  // the newest chat, so it never yanks the list while someone is reading it.)
+  const newestId = conversations.find((c) => !c.is_pinned)?.id;
+  const seenNewest = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (seenNewest.current !== undefined && newestId && newestId !== seenNewest.current) {
+      scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    seenNewest.current = newestId;
+  }, [newestId]);
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <ConfirmDialog
@@ -164,9 +177,10 @@ export function ConversationList() {
           <>
             {groups.map((group) => (
               <div key={group.label} className="animate-fade-in">
+                {/* Sticky, so whichever section you are in stays named while you scroll. */}
                 <p
-                  className="flex select-none items-center gap-1.5 px-2.5 pb-1.5 pt-4 text-[12px] font-medium"
-                  style={{ color: "var(--text-muted)" }}
+                  className="sticky top-0 z-[1] flex select-none items-center gap-1.5 px-2.5 pb-1.5 pt-3 text-[12px] font-medium"
+                  style={{ color: "var(--text-muted)", background: "var(--sidebar-bg)" }}
                 >
                   {group.label}
                 </p>
@@ -208,10 +222,10 @@ export function ConversationList() {
         aria-label="Back to recent chats"
         aria-hidden={!showRecent}
         tabIndex={showRecent ? 0 : -1}
-        className="absolute left-1/2 top-2 z-10 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-medium transition-all duration-300 ease-out hover:brightness-125"
+        className="absolute bottom-2 left-1/2 z-10 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-medium transition-all duration-300 ease-out hover:brightness-125"
         style={{
           opacity: showRecent ? 1 : 0,
-          transform: `translateX(-50%) translateY(${showRecent ? 0 : -8}px)`,
+          transform: `translateX(-50%) translateY(${showRecent ? 0 : 8}px)`,
           pointerEvents: showRecent ? "auto" : "none",
           background: "var(--surface-2)",
           border: "1px solid var(--border-strong)",
