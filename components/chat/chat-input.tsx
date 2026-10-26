@@ -1,9 +1,14 @@
 "use client";
 
 import { useRef, useState, useEffect, type KeyboardEvent } from "react";
-import { ArrowUp, Square, Plus, ChevronDown, Check, Paperclip, Camera, X, FileText, Image as ImageIcon } from "lucide-react";
+import { ArrowUp, Square, Plus, ChevronDown, ChevronRight, Check, Paperclip, Camera, X, FileText, Image as ImageIcon, Brain, Globe, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useSkills } from "@/lib/hooks/use-skills";
+import { ComposerChip, SkillsPicker } from "@/components/chat/skills-picker";
+import { useVoiceInput } from "@/lib/hooks/use-voice-input";
 import { RepoSelector } from "@/components/layout/repo-selector";
+import { ListeningStrip, VOICE_MESSAGES, VoiceButton } from "@/components/chat/voice-input";
 
 /* ── Agent definitions ─────────────────────────────────────────── */
 const AGENTS = [
@@ -25,9 +30,44 @@ const AGENTS = [
     description: "Hotel, ERP, POS & stock management specialist",
     dot: "#fbbf24",
   },
+  {
+    id: "reasoning",
+    label: "Reasoning",
+    description: "Deepest model, step by step — slower, for hard questions",
+    dot: "#f472b6",
+  },
+  {
+    id: "math",
+    label: "Mathematics",
+    description: "Deepest model, checked working — slower",
+    dot: "#38bdf8",
+  },
+  {
+    id: "planning",
+    label: "Agent planning",
+    description: "Breaks a goal into ordered, checkable steps",
+    dot: "#a78bfa",
+  },
 ] as const;
 
+/* Modes whose profile thinks by default (mirrors backend app/llm/profiles.py). */
+const THINKS_BY_DEFAULT = new Set<string>(["code", "reasoning", "math", "planning"]);
+
 type AgentId = (typeof AGENTS)[number]["id"];
+
+/* ── [Blanks] from quick-start templates ───────────────────────── */
+const BLANKS = /\[[^\]\n]+\]/g;
+const HAS_BLANK = /\[[^\]\n]+\]/;
+
+/** Select the next [blank] at or after `from`, wrapping to the first. True if there was one. */
+function selectBlank(el: HTMLTextAreaElement, from: number): boolean {
+  const matches = [...el.value.matchAll(BLANKS)];
+  if (matches.length === 0) return false;
+  const next = matches.find((m) => (m.index ?? 0) >= from) ?? matches[0]!;
+  const start = next.index ?? 0;
+  el.setSelectionRange(start, start + next[0].length);
+  return true;
+}
 
 /* ── Attached file type ────────────────────────────────────────── */
 interface AttachedFile {
@@ -48,6 +88,17 @@ export function ChatInput({
   const [value, setValue] = useState("");
   const agent = useChatStore((s) => s.agentMode);
   const setAgent = useChatStore((s) => s.setAgentMode);
+  const thinking = useChatStore((s) => s.thinking);
+  const setThinking = useChatStore((s) => s.setThinking);
+  const webSearch = useChatStore((s) => s.webSearch);
+  const setWebSearch = useChatStore((s) => s.setWebSearch);
+  const selectedSkills = useChatStore((s) => s.selectedSkills);
+  const toggleSkill = useChatStore((s) => s.toggleSkill);
+  // isError: the server has skills turned off (404), so the menu has no Skills row.
+  const { data: skillList, isError: skillsOff } = useSkills();
+  // Everything the user can pick: their own skills first, then the built-in ones.
+  const pickable = skillList ? [...skillList.installed, ...skillList.system] : [];
+  const [plusView, setPlusView] = useState<"main" | "skills">("main");
   const [agentOpen, setAgentOpen] = useState(false);
   const [switchedTo, setSwitchedTo] = useState<string | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -58,8 +109,81 @@ export function ChatInput({
   const agentRef = useRef<HTMLDivElement>(null);
   const attachRef = useRef<HTMLDivElement>(null);
 
+  /* ── Voice dictation ─────────────────────────────────────────── */
+  // What was in the box when dictation began; the words heard are added after it.
+  const voiceBaseRef = useRef("");
+  // False once the user types or sends: words the browser still delivers after
+  // that must not overwrite what they did.
+  const dictatingRef = useRef(false);
+  const voice = useVoiceInput({
+    onTranscript: (heard) => {
+      if (!dictatingRef.current) return;
+      const base = voiceBaseRef.current;
+      setValue(heard ? (base ? `${base} ${heard}` : heard) : base);
+      requestAnimationFrame(resizeTextarea);
+    },
+    onError: (kind) => {
+      if (kind === "no-speech") toast(VOICE_MESSAGES[kind]);
+      else toast.error(VOICE_MESSAGES[kind]);
+    },
+  });
+  const { listening, stop: stopVoice } = voice;
+
+  function toggleVoice() {
+    if (listening) { stopVoice(); return; }
+    if (!voice.supported) { toast.error(VOICE_MESSAGES.unsupported); return; }
+    voiceBaseRef.current = value.trimEnd();
+    dictatingRef.current = true;
+    voice.start();
+    textareaRef.current?.focus();
+  }
+
+  /** Typing or sending takes over from dictation: keep what is there, stop listening. */
+  function endDictation() {
+    if (!listening) return;
+    dictatingRef.current = false;
+    stopVoice();
+  }
+
+  // Esc stops dictation wherever focus is.
+  useEffect(() => {
+    if (!listening) return;
+    const onEsc = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape") stopVoice(); };
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [listening, stopVoice]);
+
+  // A reply starting to stream ends dictation.
+  useEffect(() => {
+    if (isStreaming && listening) {
+      dictatingRef.current = false;
+      stopVoice();
+    }
+  }, [isStreaming, listening, stopVoice]);
+
   const hasContent = value.trim().length > 0 || attachedFiles.length > 0;
+  const hasBlank = HAS_BLANK.test(value);
   const selectedAgent = AGENTS.find((a) => a.id === agent)!;
+
+  /* A quick-start card fills the box — a template with [blanks], maybe a
+     file — and hands over. Nothing is sent until the user presses Enter. */
+  const draft = useChatStore((s) => s.composerDraft);
+  const setComposerDraft = useChatStore((s) => s.setComposerDraft);
+  useEffect(() => {
+    if (!draft) return;
+    setValue(draft.text);
+    if (draft.files?.length) handleFiles(draft.files);
+    setComposerDraft(null);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+      if (!selectBlank(el, 0)) el.setSelectionRange(el.value.length, el.value.length);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
 
   /* Close dropdowns on outside click */
   useEffect(() => {
@@ -118,6 +242,7 @@ export function ChatInput({
   function submit() {
     const t = value.trim();
     if ((!t && attachedFiles.length === 0) || isStreaming) return;
+    endDictation();
     onSend(t, attachedFiles.map((f) => f.file), agent);
     setValue("");
     setAttachedFiles([]);
@@ -125,17 +250,32 @@ export function ChatInput({
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); return; }
+    // Tab moves between a template's [blanks] while there are any; otherwise it is plain Tab.
+    if (e.key === "Tab" && !e.shiftKey && hasBlank) {
+      const el = e.currentTarget;
+      if (selectBlank(el, el.selectionEnd)) e.preventDefault();
+    }
   }
 
   function onTextInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    endDictation();
     setValue(e.target.value);
     const el = e.target;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }
 
-  function handleFiles(files: FileList | null) {
+  /** Grow the box to its text, keeping the newest dictated words in view. */
+  function resizeTextarea() {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function handleFiles(files: FileList | File[] | null) {
     if (!files) return;
     Array.from(files).forEach((file) => {
       const id = `${file.name}-${Date.now()}-${Math.random()}`;
@@ -170,12 +310,16 @@ export function ChatInput({
         background: "var(--surface-1)",
         border: isStreaming
           ? "1px solid var(--accent-border)"
+          : listening
+          ? "1px solid rgba(239,68,68,0.55)"
           : hasContent
           ? "1px solid var(--border-strong)"
           : "1px solid var(--border-default)",
         borderRadius: "18px",
         boxShadow: isStreaming
           ? `0 0 0 3px var(--accent-subtle), var(--shadow-lg)`
+          : listening
+          ? "0 0 0 3px rgba(239,68,68,0.14), var(--shadow-lg)"
           : hasContent
           ? "var(--shadow-lg)"
           : "var(--shadow-md)",
@@ -198,7 +342,7 @@ export function ChatInput({
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/*,.pdf,.docx,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.go,.rs,.java,.cs,.cpp,.c,.html,.css,.yaml,.yml,.toml,.sh"
+        accept="image/*,.pdf,.docx,.xlsx,.xlsm,.txt,.md,.csv,.tsv,.json,.ts,.tsx,.js,.jsx,.py,.go,.rs,.java,.cs,.cpp,.c,.html,.css,.yaml,.yml,.toml,.sh"
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
@@ -208,6 +352,28 @@ export function ChatInput({
         <div className="flex flex-wrap gap-2 px-4 pt-3">
           {attachedFiles.map((af) => (
             <FileChip key={af.id} af={af} onRemove={() => removeFile(af.id)} />
+          ))}
+        </div>
+      )}
+
+      {/* What is switched on for the next messages: web search and picked skills */}
+      {(webSearch || selectedSkills.length > 0) && (
+        <div className="flex flex-wrap gap-2 px-4 pt-3">
+          {webSearch && (
+            <ComposerChip
+              icon={<Globe className="size-3" />}
+              label="Web search"
+              onRemove={() => setWebSearch(false)}
+              disabled={isStreaming}
+            />
+          )}
+          {selectedSkills.map((slug) => (
+            <ComposerChip
+              key={slug}
+              icon={<Sparkles className="size-3" />}
+              label={pickable.find((s) => s.slug === slug)?.name ?? slug}
+              onRemove={() => toggleSkill(slug)}
+            />
           ))}
         </div>
       )}
@@ -229,6 +395,20 @@ export function ChatInput({
         </div>
       )}
 
+      {/* How to fill a quick-start template */}
+      {hasBlank && !isStreaming && (
+        <div className="flex flex-wrap items-center gap-1.5 px-5 pt-3 text-[11.5px] animate-fade-in" style={{ color: "var(--text-muted)" }}>
+          Replace the <span style={{ color: "var(--accent-bright)" }}>[bracketed]</span> parts
+          <span aria-hidden>·</span>
+          <kbd className="kbd">Tab</kbd> jumps to the next one
+        </div>
+      )}
+
+      {/* Dictation in progress */}
+      {listening && voice.startedAt !== null && (
+        <ListeningStrip levelRef={voice.levelRef} startedAt={voice.startedAt} />
+      )}
+
       {/* Textarea */}
       <textarea
         ref={textareaRef}
@@ -237,12 +417,13 @@ export function ChatInput({
         onKeyDown={onKeyDown}
         disabled={disabled}
         placeholder={
+          listening ? "Listening… start speaking" :
           agent === "business" ? "Ask about hotel management, ERP, POS, inventory…" :
           agent === "code"     ? "Ask anything about your codebase…" :
           "Ask me anything — coding, history, business, pop culture…"
         }
         rows={1}
-        className="w-full resize-none bg-transparent px-5 pt-4 pb-2 text-[14px] leading-relaxed focus:outline-none disabled:opacity-40"
+        className="composer-input w-full resize-none bg-transparent px-5 pt-4 pb-2 leading-relaxed focus:outline-none disabled:opacity-40"
         style={{
           color: "var(--text-primary)",
           maxHeight: "200px",
@@ -254,13 +435,14 @@ export function ChatInput({
       {/* Bottom toolbar */}
       <div className="flex items-center justify-between px-3 pb-3 pt-1">
 
-        {/* Left — attach + agent + repo (code mode) */}
-        <div className="flex items-center gap-1">
+        {/* Left — attach + agent + repo (code mode).
+            min-w-0 lets this cluster shrink instead of pushing send off-screen. */}
+        <div className="flex min-w-0 items-center gap-1">
 
           {/* Attach dropdown */}
           <div ref={attachRef} className="relative">
             <button
-              onClick={() => { setAttachOpen((o) => !o); setAgentOpen(false); }}
+              onClick={() => { setAttachOpen((o) => !o); setAgentOpen(false); setPlusView("main"); }}
               className={`icon-btn size-8 rounded-lg ${attachOpen ? "open" : ""}`}
               aria-label="Add files or photos"
               aria-expanded={attachOpen}
@@ -272,7 +454,7 @@ export function ChatInput({
             {/* Attach menu */}
             {attachOpen && (
               <div
-                className="absolute bottom-full left-0 mb-2 w-[260px] overflow-hidden rounded-xl animate-scale-up"
+                className="absolute bottom-full left-0 mb-2 w-[300px] overflow-hidden rounded-xl animate-scale-up"
                 style={{
                   background: "var(--surface-2)",
                   border: "1px solid var(--border-strong)",
@@ -280,20 +462,53 @@ export function ChatInput({
                   transformOrigin: "bottom left",
                 }}
               >
-                <AttachMenuItem
-                  icon={<Paperclip className="size-4" />}
-                  label="Add files or photos"
-                  shortcut="Ctrl+U"
-                  onClick={() => fileInputRef.current?.click()}
-                />
-                <AttachMenuItem
-                  icon={<Camera className="size-4" />}
-                  label="Take a screenshot"
-                  onClick={() => {
-                    // placeholder — screenshot capture hook goes here
-                    setAttachOpen(false);
-                  }}
-                />
+                {plusView === "skills" ? (
+                  <SkillsPicker
+                    skills={pickable}
+                    loading={!skillList}
+                    selected={selectedSkills}
+                    onToggle={toggleSkill}
+                    onBack={() => setPlusView("main")}
+                    onNavigate={() => setAttachOpen(false)}
+                  />
+                ) : (
+                  <>
+                    <AttachMenuItem
+                      icon={<Paperclip className="size-4" />}
+                      label="Add files or photos"
+                      shortcut="Ctrl+U"
+                      onClick={() => fileInputRef.current?.click()}
+                    />
+                    <AttachMenuItem
+                      icon={<Camera className="size-4" />}
+                      label="Take a screenshot"
+                      onClick={() => {
+                        // placeholder — screenshot capture hook goes here
+                        setAttachOpen(false);
+                      }}
+                    />
+                    {/* The globe, moved here from the toolbar. Off means the model decides for
+                        itself whether a question needs the web (the normal case); on forces a
+                        search for the next message — the escape hatch for when it decides wrong. */}
+                    <AttachMenuItem
+                      icon={<Globe className="size-4" />}
+                      label="Web search"
+                      hint={webSearch ? "On for your messages" : "Search the web for answers"}
+                      disabled={isStreaming}
+                      trailing={webSearch ? <Check className="size-4" style={{ color: "var(--accent-bright)" }} /> : undefined}
+                      onClick={() => { setWebSearch(!webSearch); setAttachOpen(false); }}
+                    />
+                    {!skillsOff && (
+                      <AttachMenuItem
+                        icon={<Sparkles className="size-4" />}
+                        label="Skills"
+                        hint={selectedSkills.length > 0 ? selectedSkills.length + " selected" : "Pick the skills to use"}
+                        trailing={<ChevronRight className="size-4" style={{ color: "var(--text-muted)" }} />}
+                        onClick={() => setPlusView("skills")}
+                      />
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -309,7 +524,8 @@ export function ChatInput({
                 className="size-1.5 rounded-full"
                 style={{ background: selectedAgent.dot, boxShadow: `0 0 4px ${selectedAgent.dot}` }}
               />
-              {selectedAgent.label}
+              {/* The coloured dot identifies the mode when the word won't fit. */}
+              <span className="hidden sm:inline">{selectedAgent.label}</span>
               <ChevronDown
                 className="size-3 transition-transform duration-150"
                 style={{ transform: agentOpen ? "rotate(180deg)" : "rotate(0deg)" }}
@@ -356,6 +572,35 @@ export function ChatInput({
             )}
           </div>
 
+          {/* Thinking: Auto (the mode's default) → On → Off → Auto */}
+          {(() => {
+            const effective = thinking ?? THINKS_BY_DEFAULT.has(agent);
+            const label = thinking === null ? `Think: auto` : thinking ? "Think: on" : "Think: off";
+            const next = thinking === null ? true : thinking ? false : null;
+            return (
+              <button
+                onClick={() => setThinking(next)}
+                disabled={isStreaming}
+                title={
+                  thinking === null
+                    ? `Following ${selectedAgent.label}'s default (${effective ? "thinks first" : "answers directly"}). Click to force on.`
+                    : thinking
+                    ? "The model reasons before answering — slower, better on hard problems. Click to force off."
+                    : "The model answers directly — fastest. Click to return to the mode's default."
+                }
+                className="menu-trigger flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium disabled:opacity-50"
+                style={{
+                  color: effective ? "var(--accent-bright)" : "var(--text-tertiary)",
+                  background: thinking === true ? "var(--accent-subtle)" : undefined,
+                }}
+                aria-label={label}
+              >
+                <Brain className="size-3.5" />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            );
+          })()}
+
           {/* Repo selector — code mode only, after agent selector */}
           {agent === "code" && (
             <>
@@ -365,8 +610,8 @@ export function ChatInput({
           )}
         </div>
 
-        {/* Right — send / stop */}
-        <div className="flex items-center gap-2">
+        {/* Right — send / stop. Never shrinks: sending is the point. */}
+        <div className="flex shrink-0 items-center gap-2">
           {isStreaming ? (
             <button
               onClick={onStop}
@@ -380,23 +625,31 @@ export function ChatInput({
               <Square className="size-3.5 fill-current" />
             </button>
           ) : (
-            <button
-              onClick={submit}
-              disabled={!hasContent || disabled}
-              aria-label="Send message"
-              className="send-btn flex size-8 items-center justify-center rounded-xl disabled:cursor-not-allowed disabled:opacity-25"
-              style={hasContent && !disabled ? {
-                background: "var(--accent-gradient)",
-                boxShadow: "var(--shadow-accent-sm), inset 0 1px 0 rgba(255,255,255,0.15)",
-                color: "#fff",
-              } : {
-                background: "var(--surface-3)",
-                border: "1px solid var(--border-default)",
-                color: "var(--text-muted)",
-              }}
-            >
-              <ArrowUp className="size-4" />
-            </button>
+            <>
+              <VoiceButton
+                supported={voice.supported}
+                listening={listening}
+                disabled={disabled}
+                onToggle={toggleVoice}
+              />
+              <button
+                onClick={submit}
+                disabled={!hasContent || disabled}
+                aria-label="Send message"
+                className="send-btn flex size-8 items-center justify-center rounded-xl disabled:cursor-not-allowed disabled:opacity-25"
+                style={hasContent && !disabled ? {
+                  background: "var(--accent-gradient)",
+                  boxShadow: "var(--shadow-accent-sm), inset 0 1px 0 rgba(255,255,255,0.15)",
+                  color: "#fff",
+                } : {
+                  background: "var(--surface-3)",
+                  border: "1px solid var(--border-default)",
+                  color: "var(--text-muted)",
+                }}
+              >
+                <ArrowUp className="size-4" />
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -406,21 +659,33 @@ export function ChatInput({
 
 /* ── Attach menu item ───────────────────────────────────────────── */
 function AttachMenuItem({
-  icon, label, shortcut, onClick,
+  icon, label, shortcut, hint, trailing, disabled, onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   shortcut?: string;
+  /** A line of explanation under the label. */
+  hint?: string;
+  /** Replaces the shortcut at the right edge: a tick, an arrow, a count. */
+  trailing?: React.ReactNode;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      className="menu-item flex w-full items-center gap-3 px-4 py-3 text-left"
+      disabled={disabled}
+      className="menu-item flex w-full items-center gap-3 px-4 py-3 text-left disabled:opacity-50"
     >
       <span style={{ color: "var(--text-tertiary)" }}>{icon}</span>
-      <span className="flex-1 text-[13px] font-medium">{label}</span>
-      {shortcut && (
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13px] font-medium">{label}</span>
+        {hint && (
+          <span className="block truncate text-[11px]" style={{ color: "var(--text-muted)" }}>{hint}</span>
+        )}
+      </span>
+      {trailing}
+      {shortcut && !trailing && (
         <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{shortcut}</span>
       )}
     </button>

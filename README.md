@@ -1,6 +1,6 @@
 # Atlas Web
 
-The primary client for Atlas — a self-hosted AI coding assistant. Built to
+The primary client for Atlas — a self-hosted AI assistant. Built to
 compete on quality with Cursor/Linear/Vercel-tier products, while staying
 strictly grounded in the actual FastAPI backend contract (`types/api.ts`
 mirrors `app/shared/schemas.py` and the router-local Pydantic models exactly).

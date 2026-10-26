@@ -6,20 +6,23 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import { toast } from "sonner";
 import {
-  ArrowRight, Clock, Download, Eye, FileText, Loader2, MessageSquare, MoreHorizontal,
-  Sparkles, Star, Trash2, Upload,
+  ArrowRight, Clock, Download, Eye, FileText, Loader2, Menu, MessageSquare, MoreHorizontal,
+  PanelRight, Sparkles, Star, Trash2, Upload,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DashboardSkeleton, TableRowsSkeleton } from "@/components/ui/skeleton";
 import { BookmarkButton } from "@/components/workspace/bookmark-button";
 import { workspaceApi } from "@/lib/api/workspace";
+import { isFailed, isProcessing, isReady } from "@/lib/documents/processing-status";
 import {
   useAddBookmark, useDeleteBookmark, useWorkspaceArtifacts, useWorkspaceBookmarks,
   useWorkspaceDashboard, useWorkspaceDocuments, useWorkspaceTimeline,
 } from "@/lib/hooks/use-workspace";
 import { useOperationsStore } from "@/lib/stores/operations-store";
 import { useUploadConfirmStore } from "@/lib/stores/upload-confirm-store";
+import { useUIStore } from "@/lib/stores/ui-store";
 import { useViewerStore } from "@/lib/stores/viewer-store";
 import type { Workspace, WorkspaceArtifact, WorkspaceDocument } from "@/types/workspace";
 
@@ -40,14 +43,17 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
   const router = useRouter();
   const params = useSearchParams();
   const qc = useQueryClient();
+  // Both columns fold away on a small screen; these are the ways back to them.
+  const setNavOpen = useUIStore((s) => s.setWorkspaceNavOpen);
+  const setContextOpen = useUIStore((s) => s.setWorkspaceContextOpen);
   const tab = (params.get("tab") as Tab) ?? "overview";
   const wsId = workspace.id;
 
   const { data: dashboard, isLoading } = useWorkspaceDashboard(wsId);
-  const { data: documents = [] } = useWorkspaceDocuments(wsId);
-  const { data: artifacts = [] } = useWorkspaceArtifacts(wsId);
-  const { data: bookmarks = [] } = useWorkspaceBookmarks(wsId);
-  const { data: timeline = [] } = useWorkspaceTimeline(wsId);
+  const { data: documents = [], isLoading: documentsLoading } = useWorkspaceDocuments(wsId);
+  const { data: artifacts = [], isLoading: artifactsLoading } = useWorkspaceArtifacts(wsId);
+  const { data: bookmarks = [], isLoading: bookmarksLoading } = useWorkspaceBookmarks(wsId);
+  const { data: timeline = [], isLoading: timelineLoading } = useWorkspaceTimeline(wsId);
   const fileInput = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<WorkspaceDocument | null>(null);
@@ -159,20 +165,39 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
       {/* Header */}
-      <div className="px-8 pb-3 pt-6">
-        <h1 className="text-[22px] font-semibold" style={{ color: "var(--text-primary)", letterSpacing: "-0.03em" }}>
-          {workspace.name}
-        </h1>
-        {workspace.description && (
-          <p className="mt-0.5 text-[13px]" style={{ color: "var(--text-muted)" }}>{workspace.description}</p>
-        )}
+      <div className="px-4 pb-3 pt-4 sm:px-8 sm:pt-6">
+        <div className="flex items-start gap-2">
+          <button
+            onClick={() => setNavOpen(true)}
+            aria-label="Open workspace menu"
+            className="icon-btn -ml-1 size-9 shrink-0 rounded-lg md:hidden"
+          >
+            <Menu className="size-[18px]" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-[19px] font-semibold sm:text-[22px]" style={{ color: "var(--text-primary)", letterSpacing: "-0.03em" }}>
+              {workspace.name}
+            </h1>
+            {workspace.description && (
+              <p className="mt-0.5 truncate text-[13px]" style={{ color: "var(--text-muted)" }}>{workspace.description}</p>
+            )}
+          </div>
+          <button
+            onClick={() => setContextOpen(true)}
+            aria-label="Open workspace context"
+            className="icon-btn size-9 shrink-0 rounded-lg lg:hidden"
+          >
+            <PanelRight className="size-[18px]" />
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 px-8" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+      {/* Five tabs do not fit a phone; they scroll rather than wrap or shrink. */}
+      <div className="flex items-center gap-1 overflow-x-auto px-4 sm:px-8" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
         {TABS.map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className="relative px-3 py-2.5 text-[13px] font-medium capitalize transition-colors"
+            className="relative shrink-0 px-3 py-2.5 text-[13px] font-medium capitalize transition-colors"
             style={{ color: tab === t ? "var(--text-primary)" : "var(--text-muted)" }}>
             {t}
             {tab === t && (
@@ -182,8 +207,8 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
-        {isLoading && <Loader2 className="mx-auto mt-10 size-5 animate-spin" style={{ color: "var(--text-muted)" }} />}
+      <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-8 sm:py-6">
+        {isLoading && tab === "overview" && <DashboardSkeleton />}
 
         {tab === "overview" && dashboard && (
           <div className="mx-auto max-w-3xl">
@@ -257,7 +282,9 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
               </Button>
               <input ref={fileInput} type="file" multiple hidden onChange={(e) => upload(e.target.files)} />
             </div>
-            {documents.length === 0 ? (
+            {documentsLoading ? (
+              <TableRowsSkeleton />
+            ) : documents.length === 0 ? (
               <EmptyState icon={FileText} text="No documents yet. Upload PDFs, Word, Excel, or text files to build your knowledge base." />
             ) : (
               <div className="flex flex-col gap-1.5">
@@ -279,7 +306,9 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
 
         {tab === "generated" && (
           <div className="mx-auto max-w-3xl">
-            {artifacts.length === 0 ? (
+            {artifactsLoading ? (
+              <TableRowsSkeleton />
+            ) : artifacts.length === 0 ? (
               <EmptyState icon={Sparkles} text="No generated documents yet. Use Generate inside a conversation to create PDFs, spreadsheets, and more." />
             ) : (
               <div className="flex flex-col gap-1.5">
@@ -308,7 +337,9 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
 
         {tab === "bookmarks" && (
           <div className="mx-auto max-w-3xl">
-            {bookmarks.length === 0 ? (
+            {bookmarksLoading ? (
+              <TableRowsSkeleton rows={3} />
+            ) : bookmarks.length === 0 ? (
               <EmptyState icon={Star} text="No bookmarks yet. Bookmark answers, documents, or artifacts to find them fast." />
             ) : (
               <div className="flex flex-col gap-1.5">
@@ -335,7 +366,9 @@ export function DashboardView({ workspace }: { workspace: Workspace }) {
 
         {tab === "timeline" && (
           <div className="mx-auto max-w-3xl">
-            {timeline.length === 0 ? (
+            {timelineLoading ? (
+              <TableRowsSkeleton rows={6} />
+            ) : timeline.length === 0 ? (
               <EmptyState icon={Clock} text="Nothing has happened yet. Your workspace history will appear here." />
             ) : (
               <div className="relative flex flex-col gap-0 pl-4">
@@ -524,9 +557,9 @@ function DocumentActions({
 }
 
 function DocStatus({ status }: { status: string }) {
-  if (status === "knowledge_ready") return <Badge variant="ready" dot>Ready</Badge>;
-  if (status === "failed") return <Badge variant="error" dot>Failed</Badge>;
-  if (["queued", "processing", "retrying"].includes(status)) return <Badge variant="indexing" dot>Processing…</Badge>;
+  if (isReady(status)) return <Badge variant="ready" dot>Ready</Badge>;
+  if (isFailed(status)) return <Badge variant="error" dot>Failed</Badge>;
+  if (isProcessing(status)) return <Badge variant="indexing" dot>Processing…</Badge>;
   return <Badge variant="pending">{status}</Badge>;
 }
 

@@ -16,6 +16,7 @@ export function ConfirmDialog({
   confirmLabel = "Delete",
   pending = false,
   onConfirm,
+  icon,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -24,6 +25,8 @@ export function ConfirmDialog({
   confirmLabel?: string;
   pending?: boolean;
   onConfirm: () => void;
+  /** Replaces the warning icon, for confirmations that aren't deletions. */
+  icon?: React.ReactNode;
 }) {
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !pending && onOpenChange(o)}>
@@ -53,7 +56,7 @@ export function ConfirmDialog({
                   className="flex size-10 shrink-0 items-center justify-center rounded-xl"
                   style={{ background: "var(--danger-bg)", border: "1px solid var(--danger-border)" }}
                 >
-                  <AlertTriangle className="size-4.5" style={{ color: "var(--danger)" }} />
+                  {icon ?? <AlertTriangle className="size-4.5" style={{ color: "var(--danger)" }} />}
                 </div>
                 <div className="min-w-0">
                   <Dialog.Title

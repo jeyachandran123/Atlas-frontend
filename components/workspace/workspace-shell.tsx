@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { WorkspaceSkeleton } from "@/components/ui/skeleton";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
 import { WorkspaceContextPanel } from "@/components/workspace/workspace-context-panel";
-import { DocumentViewer } from "@/components/workspace/document-viewer";
+import { WorkspaceContextSheet, WorkspaceNavDrawer } from "@/components/workspace/workspace-mobile";
 import { OperationsTray } from "@/components/workspace/operations-tray";
 import { UploadConfirmDialog } from "@/components/workspace/upload-confirm-dialog";
 import { useWorkspaces } from "@/lib/hooks/use-workspace";
@@ -26,13 +26,7 @@ export function WorkspaceShell({
     if (workspace) setActive(workspace.id);
   }, [workspace, setActive]);
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="size-5 animate-spin" style={{ color: "var(--text-muted)" }} />
-      </div>
-    );
-  }
+  if (isLoading) return <WorkspaceSkeleton />;
 
   if (!workspace) {
     return (
@@ -48,9 +42,12 @@ export function WorkspaceShell({
       <WorkspaceSidebar workspace={workspace} />
       <main className="flex min-w-0 flex-1 flex-col">{children}</main>
       <WorkspaceContextPanel workspace={workspace} />
-      {/* One viewer + one operations tray for the whole workspace — mounted
-          at the shell so they survive page navigation within the workspace. */}
-      <DocumentViewer />
+      {/* The same two columns, reachable on a screen too narrow to hold them. */}
+      <WorkspaceNavDrawer workspace={workspace} />
+      <WorkspaceContextSheet workspace={workspace} />
+      {/* One operations tray for the whole workspace — mounted at the shell so
+          it survives page navigation within the workspace. The document viewer
+          is mounted once for the whole app, in the dashboard layout. */}
       <OperationsTray />
       <UploadConfirmDialog />
     </div>

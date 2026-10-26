@@ -5,6 +5,9 @@ import type {
   FirebaseLoginRequest,
   FirebaseLoginResponse,
   RegisterRequest,
+  SetPasswordRequest,
+  SignupVerificationPending,
+  VerifySignupRequest,
   UserOut,
   APIKeyOut,
   CreateAPIKeyRequest,
@@ -18,8 +21,17 @@ export const authApi = {
   firebaseLogin: (data: FirebaseLoginRequest) =>
     api.post<FirebaseLoginResponse>("/auth/firebase-login", data, { skipAuth: true }),
 
+  /** The account itself, or — when email is set up — a code to confirm first. */
   register: (data: RegisterRequest) =>
-    api.post<UserOut>("/auth/register", data, { skipAuth: true }),
+    api.post<UserOut | SignupVerificationPending>("/auth/register", data, { skipAuth: true }),
+
+  verifySignup: (data: VerifySignupRequest) =>
+    api.post<UserOut>("/auth/register/verify", data, { skipAuth: true }),
+
+  resendSignupCode: (email: string) =>
+    api.post<Omit<SignupVerificationPending, "verification">>(
+      "/auth/register/resend", { email }, { skipAuth: true },
+    ),
 
   refresh: (refreshToken: string) =>
     api.post<{ access_token: string }>(
@@ -32,6 +44,10 @@ export const authApi = {
     api.post<void>("/auth/logout", { refresh_token: refreshToken }, { skipAuth: true }),
 
   me: () => api.get<UserOut>("/auth/me"),
+
+  /** Add a password to this account (e.g. a Google account), or change it. */
+  setPassword: (data: SetPasswordRequest) =>
+    api.post<{ has_password: boolean }>("/auth/password", data),
 
   createApiKey: (data: CreateAPIKeyRequest) =>
     api.post<CreateAPIKeyResponse>("/auth/keys", data),

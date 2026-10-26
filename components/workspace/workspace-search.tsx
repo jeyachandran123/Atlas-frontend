@@ -84,7 +84,7 @@ export function WorkspaceSearch({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center pt-[12vh]"
+      className="fixed inset-0 z-[100] flex items-start justify-center pt-[8dvh] sm:pt-[12dvh]"
       style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
       onClick={onClose}
     >
@@ -112,7 +112,7 @@ export function WorkspaceSearch({
           <button onClick={onClose} aria-label="Close search"><X className="size-4" style={{ color: "var(--text-muted)" }} /></button>
         </div>
 
-        <div className="max-h-[52vh] overflow-y-auto p-2">
+        <div className="max-h-[52dvh] overflow-y-auto p-2">
           {q.trim().length >= 2 && !loading && !hasResults && (
             <p className="px-3 py-6 text-center text-[13px]" style={{ color: "var(--text-muted)" }}>
               No matches for “{q}”.
