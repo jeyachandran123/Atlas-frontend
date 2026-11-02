@@ -9,6 +9,7 @@ import { ComposerChip, SkillsPicker } from "@/components/chat/skills-picker";
 import { useVoiceInput } from "@/lib/hooks/use-voice-input";
 import { RepoSelector } from "@/components/layout/repo-selector";
 import { ListeningStrip, VOICE_MESSAGES, VoiceButton } from "@/components/chat/voice-input";
+import { useVoiceConfig, VoiceAgentButton } from "@/components/chat/voice-agent/voice-button";
 
 /* ── Agent definitions ─────────────────────────────────────────── */
 const AGENTS = [
@@ -162,6 +163,7 @@ export function ChatInput({
   }, [isStreaming, listening, stopVoice]);
 
   const hasContent = value.trim().length > 0 || attachedFiles.length > 0;
+  const voiceEnabled = useVoiceConfig().data?.enabled === true;
   const hasBlank = HAS_BLANK.test(value);
   const selectedAgent = AGENTS.find((a) => a.id === agent)!;
 
@@ -632,23 +634,27 @@ export function ChatInput({
                 disabled={disabled}
                 onToggle={toggleVoice}
               />
-              <button
-                onClick={submit}
-                disabled={!hasContent || disabled}
-                aria-label="Send message"
-                className="send-btn flex size-8 items-center justify-center rounded-xl disabled:cursor-not-allowed disabled:opacity-25"
-                style={hasContent && !disabled ? {
-                  background: "var(--accent-gradient)",
-                  boxShadow: "var(--shadow-accent-sm), inset 0 1px 0 rgba(255,255,255,0.15)",
-                  color: "#fff",
-                } : {
-                  background: "var(--surface-3)",
-                  border: "1px solid var(--border-default)",
-                  color: "var(--text-muted)",
-                }}
-              >
-                <ArrowUp className="size-4" />
-              </button>
+              {!hasContent && voiceEnabled ? (
+                <VoiceAgentButton disabled={disabled} />
+              ) : (
+                <button
+                  onClick={submit}
+                  disabled={!hasContent || disabled}
+                  aria-label="Send message"
+                  className="send-btn flex size-8 items-center justify-center rounded-xl disabled:cursor-not-allowed disabled:opacity-25"
+                  style={hasContent && !disabled ? {
+                    background: "var(--accent-gradient)",
+                    boxShadow: "var(--shadow-accent-sm), inset 0 1px 0 rgba(255,255,255,0.15)",
+                    color: "#fff",
+                  } : {
+                    background: "var(--surface-3)",
+                    border: "1px solid var(--border-default)",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  <ArrowUp className="size-4" />
+                </button>
+              )}
             </>
           )}
         </div>

@@ -5,6 +5,7 @@ import { RotateCcw, Share2, Check, AlertCircle } from "lucide-react";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { StreamingMessageBubble } from "@/components/chat/streaming-message-bubble";
 import { ChatInput } from "@/components/chat/chat-input";
+import { VoiceOverlay } from "@/components/chat/voice-agent/voice-overlay";
 import { QuickActions, type QuickStart } from "@/components/chat/quick-actions";
 import { PromptNavigator, type PromptEntry } from "@/components/chat/prompt-navigator";
 import { ScrollToBottomButton } from "@/components/chat/scroll-to-bottom";
@@ -598,6 +599,7 @@ export function ChatThread() {
             onStop={stop}
             isStreaming={isActiveStream}
           />
+          <VoiceOverlay />
           <p className="mt-2.5 text-center text-[11px]" style={{ color: "var(--text-muted)" }}>
             UnityWorks can make mistakes. Verify important information.
           </p>

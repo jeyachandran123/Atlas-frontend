@@ -528,3 +528,24 @@ export class ApiError extends Error {
     this.detail = detail;
   }
 }
+
+// ─── Voice agent (app/api/v1/voice/router.py) ────────────────────────────────
+
+export interface VoiceConfig {
+  enabled: boolean;
+  max_session_seconds: number;
+  idle_timeout_seconds: number;
+}
+
+export interface VoiceSessionOut {
+  token: string;
+  model: string;
+  websocket_url: string;
+  expires_at: string;
+}
+
+export interface VoiceTurn {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+}
