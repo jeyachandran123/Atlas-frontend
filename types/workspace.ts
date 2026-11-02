@@ -152,6 +152,45 @@ export type WorkspaceAskEvent =
   | { event: "title"; data: { title: string } }
   | { event: "error"; data: { message: string } };
 
+export interface DocumentTaskCheck {
+  name: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface DocumentTaskPreview {
+  kind: string;
+  summary: string;
+  headers: string[];
+  rows: string[][];
+  row_count: number;
+  column_count: number;
+  checks: DocumentTaskCheck[];
+  all_passed: boolean;
+}
+
+/** A task either produces a file or answers a question; the model's code decides which. */
+export type WorkspaceDocumentTaskEvent =
+  | { event: "meta"; data: { artifact_id: string; correlation_id: string } }
+  | { event: "stage"; data: { stage: string; detail: Record<string, unknown> } }
+  | {
+      event: "done";
+      data: {
+        kind: "file" | "answer";
+        answer?: string;
+        artifact_id?: string;
+        filename?: string;
+        size_bytes?: number;
+        attempts: number;
+        llm_ms: number;
+        sandbox_ms: number;
+        summary?: string;
+        preview?: DocumentTaskPreview | null;
+        code?: string;
+      };
+    }
+  | { event: "error"; data: { message: string; attempts?: number; code?: string } };
+
 export type WorkspaceGenerateEvent =
   | { event: "meta"; data: { artifact_id: string; correlation_id: string; format: string } }
   | { event: "stage"; data: { stage: string; detail: Record<string, unknown> } }

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { WorkspaceSkeleton } from "@/components/ui/skeleton";
 
 /**
  * The standalone Knowledge page is superseded by the Workspace experience
@@ -14,9 +14,5 @@ export default function KnowledgeRedirectPage() {
   useEffect(() => {
     router.replace("/w");
   }, [router]);
-  return (
-    <div className="flex h-full items-center justify-center">
-      <Loader2 className="size-5 animate-spin" style={{ color: "var(--text-muted)" }} />
-    </div>
-  );
+  return <WorkspaceSkeleton />;
 }

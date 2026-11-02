@@ -21,7 +21,7 @@ async function proxy(
   const headers = new Headers();
   req.headers.forEach((value, key) => {
     const k = key.toLowerCase();
-    if (k === "host" || k === "connection" || k === "transfer-encoding") return;
+    if (k === "host" || k === "connection" || k === "transfer-encoding" || k === "accept-encoding") return;
     headers.set(key, value);
   });
 
@@ -44,6 +44,8 @@ async function proxy(
   upstream.headers.forEach((value, key) => {
     const k = key.toLowerCase();
     if (k === "transfer-encoding") return;
+    if (k === "content-encoding") return;
+    if (k === "content-length") return;
     resHeaders.set(key, value);
   });
 

@@ -345,6 +345,21 @@
   }
   .animate-slide-in-left { animation: slide-in-left 200ms cubic-bezier(0.16,1,0.3,1) both; }
 
+  /* A panel that travels its own width — the mobile nav drawer. slide-in-left
+     above is an 8px nudge for small elements; at 320px it reads as a shimmy. */
+  @keyframes drawer-in {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(0); }
+  }
+  .animate-drawer-in { animation: drawer-in 240ms cubic-bezier(0.16,1,0.3,1) both; }
+
+  /* The same idea from the bottom edge, for panels that belong at thumb height. */
+  @keyframes sheet-up {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+  .animate-sheet-up { animation: sheet-up 260ms cubic-bezier(0.16,1,0.3,1) both; }
+
   @keyframes pulse-glow {
     0%, 100% { opacity: 1; }
     50%       { opacity: 0.30; }
@@ -546,7 +561,10 @@
   animation: fade-in 150ms ease both;
 }
 .cmdk-content {
-  position: fixed; left: 50%; top: 16%; transform: translateX(-50%);
+  /* Centred with margins, not transform: the scale-up animation below sets
+     transform too, and with fill-mode "both" its end state (scale(1)) replaced
+     translateX(-50%) — leaving the palette's left edge at the middle of the screen. */
+  position: fixed; left: 0; right: 0; margin-inline: auto; top: 16%;
   z-index: 61; width: min(560px, calc(100vw - 32px));
   background: var(--surface-1);
   border: 1px solid var(--border-strong);
@@ -592,7 +610,13 @@
   border-color: var(--accent-border);
   color: var(--accent-glow);
 }
-.cmdk-list { max-height: 340px; overflow-y: auto; padding: 6px; }
+/* 340px of results plus the input, scope row and footer overflows a phone held
+   sideways — roughly 500px of chrome against a 390px viewport. Bounded by the
+   viewport as well as by a fixed height, it fits either way round. */
+.cmdk-list { max-height: min(340px, 45dvh); overflow-y: auto; padding: 6px; }
+@media (max-height: 620px) {
+  .cmdk-content { top: 8px; }
+}
 .cmdk-empty { padding: 24px 16px; text-align: center; font-size: 13px; color: var(--text-muted); }
 .cmdk-group [cmdk-group-heading] {
   padding: 8px 10px 4px;
@@ -747,16 +771,44 @@
   box-shadow: 0 0 0 3px rgba(99,102,241,0.10);
 }
 
+/* The chat composer. Its size lives here rather than in a utility class so the
+   coarse-pointer block below can raise it to 16px — Safari zooms the page in on
+   any focused field smaller than that, which shunts the layout sideways. */
+.composer-input { font-size: 14px; }
+
 /* Page header */
 .page-header {
   position: sticky;
   top: 0;
   z-index: 10;
-  padding: 18px 32px;
+  /* 32px of side padding is a fifth of a phone screen; desktop keeps it. */
+  padding: 14px 16px;
   background: var(--surface-glass);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border-bottom: 1px solid var(--border-subtle);
+}
+@media (min-width: 768px) {
+  .page-header { padding: 18px 32px; }
+}
+
+/* ── Touch targets ────────────────────────────────────────────────
+   Keyed to the pointer, not the viewport: a tablet driven by a trackpad
+   keeps the tight desktop sizing, while anything touched gets controls a
+   thumb can actually hit. 44px is the floor Apple and Google both publish.
+   16px inputs are not a style choice — Safari zooms the page in on any
+   focused field below that, which shunts the layout sideways. */
+@media (pointer: coarse) {
+  .icon-btn { min-width: 44px; min-height: 44px; }
+  /* Every <Button> carries this, so the floor applies to `sm` and `icon-sm`
+     too — they are 28px tall, which no thumb can hit reliably. */
+  .touch-target { min-width: 44px; min-height: 44px; }
+  .rail-item { width: 44px; height: 44px; }
+  .auth-input, .dialog-input { height: 44px; font-size: 16px; }
+  .cmdk-input { font-size: 16px; }
+  .composer-input { font-size: 16px; }
+  .cmdk-item { padding: 12px 10px; }
+  .menu-item { padding-top: 10px; padding-bottom: 10px; }
 }
 
 /* Status badge */
@@ -1029,3 +1081,178 @@ html[data-theme="light"] .assistant-content code:not(pre code) {
 }
 .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
 .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* ─── Voice agent ───────────────────────────────────────────────────
+   The orb is the one loud thing on this screen. Everything else stays quiet,
+   and the whole stack always fits the window: the orb takes what height is left. */
+.voice-agent-btn {
+  background: var(--accent-gradient);
+  box-shadow: var(--shadow-accent-sm), inset 0 1px 0 rgba(255,255,255,0.15);
+  color: #fff;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.voice-agent-btn:hover:not(:disabled) { transform: scale(1.06); box-shadow: var(--shadow-accent); }
+.voice-agent-btn:active:not(:disabled) { transform: scale(0.96); }
+
+.voice-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100dvh;
+  overflow: hidden;
+  padding: 28px 20px max(24px, env(safe-area-inset-bottom));
+  background: var(--canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+/* A size container: the canvas is sized from whichever of width or height is tighter. */
+.voice-stage {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  container-type: size;
+  --orb-energy: 0;
+}
+/* The canvas is far larger than the orb, and clear, so no fold or stray dot ever
+   meets its edge. It may run behind the text and is never in the way of a tap. */
+.voice-orb {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(158cqmin, 1240px);
+  height: min(158cqmin, 1240px);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.voice-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(120cqmin, 780px);
+  height: min(120cqmin, 780px);
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, var(--accent-subtle), transparent);
+  opacity: calc(0.55 + var(--orb-energy) * 1.1);
+  transform: translate(-50%, -50%) scale(calc(0.94 + var(--orb-energy) * 0.16));
+}
+
+.voice-words {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(100%, 62ch);
+  /* Reserved up front, so the orb never resizes as a caption grows. */
+  height: calc(20px + 6px + 16.5px * 1.55 * 3);
+  margin-top: 8px;
+}
+.voice-status {
+  height: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+.voice-caption {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  width: 100%;
+  max-height: calc(16.5px * 1.55 * 3);
+  overflow: hidden;
+  text-align: center;
+  text-wrap: pretty;
+  font-family: var(--font-sans), "Nirmala UI", "Noto Sans Tamil", sans-serif;
+  font-size: 16.5px;
+  line-height: 1.55;
+  letter-spacing: -0.008em;
+  transition: color 0.2s ease;
+}
+/* Once a reply fills the box, words roll upward and fade out at the top. */
+.voice-caption[data-long] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 34%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 34%);
+}
+.voice-caption[data-from="atlas"] { color: var(--text-primary); }
+.voice-caption[data-from="you"] { color: var(--text-secondary); }
+
+.voice-problem {
+  width: 100%;
+  text-align: center;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.voice-problem-title { color: var(--text-primary); font-size: 16.5px; font-weight: 550; margin-bottom: 2px; }
+
+/* One quiet dock instead of three separate circles. */
+.voice-dock {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 18px;
+  padding: 6px;
+  border-radius: 999px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-md);
+}
+.voice-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.voice-control:hover { background: var(--surface-3); color: var(--text-primary); }
+.voice-control[data-active] { background: var(--text-primary); color: var(--text-inverse); }
+.voice-dock-rule { width: 1px; height: 22px; margin: 0 6px; background: var(--border-default); }
+.voice-end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 18px 0 14px;
+  border-radius: 22px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 550;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.voice-end:hover { background: var(--danger); color: var(--text-inverse); }
+.voice-action {
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 22px;
+  background: var(--text-primary);
+  color: var(--text-inverse);
+  font-size: 14px;
+  font-weight: 550;
+}
+.voice-action-quiet { background: transparent; color: var(--text-secondary); }
+.voice-action-quiet:hover { color: var(--text-primary); }
+.voice-screen button:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+
+@media (max-height: 560px) {
+  .voice-caption { max-height: calc(15px * 1.5 * 2); font-size: 15px; }
+  .voice-words { gap: 4px; height: calc(20px + 4px + 15px * 1.5 * 2); }
+  .voice-dock { margin-top: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .voice-glow { transform: translate(-50%, -50%); }
+}
+.voice-dock-plain { background: transparent; border-color: transparent; box-shadow: none; gap: 8px; }

@@ -6,19 +6,23 @@ import { FileText, Loader2, Trash2, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { knowledgeApi } from "@/lib/api/knowledge";
+import {
+  isFailed,
+  isProcessing,
+  isReady,
+  pollInterval,
+} from "@/lib/documents/processing-status";
 import type { DipDocument } from "@/types/knowledge";
 import { cn } from "@/lib/utils/cn";
 
-const ACTIVE_STATES = new Set(["queued", "processing", "retrying"]);
-
 function statusBadge(doc: DipDocument, indexed: boolean) {
-  if (doc.processing_status === "knowledge_ready") {
+  if (isReady(doc.processing_status)) {
     return indexed
       ? <Badge variant="ready" dot>Ready</Badge>
       : <Badge variant="indexing" dot>Embedding…</Badge>;
   }
-  if (doc.processing_status === "failed") return <Badge variant="error" dot>Failed</Badge>;
-  if (ACTIVE_STATES.has(doc.processing_status)) return <Badge variant="indexing" dot>Processing…</Badge>;
+  if (isFailed(doc.processing_status)) return <Badge variant="error" dot>Failed</Badge>;
+  if (isProcessing(doc.processing_status)) return <Badge variant="indexing" dot>Processing…</Badge>;
   return <Badge variant="pending">{doc.processing_status || "uploaded"}</Badge>;
 }
 
@@ -40,10 +44,7 @@ export function DocumentsPanel({
     // Poll ONLY while a document is actively processing; go quiet otherwise
     // (uploads/deletes invalidate the query explicitly, so idle polling
     // buys nothing and spams the API).
-    refetchInterval: (q) => {
-      const docs = q.state.data?.items ?? [];
-      return docs.some((d) => ACTIVE_STATES.has(d.processing_status)) ? 3000 : false;
-    },
+    refetchInterval: (q) => pollInterval(q.state.data?.items),
   });
   const docs = data?.items ?? [];
 

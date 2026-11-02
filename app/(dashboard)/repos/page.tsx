@@ -27,7 +27,7 @@ export default function ReposPage() {
         </div>
       </div>
 
-      <div className="px-8 py-6">
+      <div className="px-4 py-5 sm:px-8 sm:py-6">
         <div className="mx-auto max-w-5xl">
           {isLoading ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -2,35 +2,62 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 interface UIState {
+  /** Sidebar folded to its icon strip. */
   sidebarCollapsed: boolean;
   citationsPanelOpen: boolean;
-  galleryOpen: boolean;
+  /** The Ctrl+K palette — opened by the shortcut or the sidebar's search button. Not persisted. */
+  paletteOpen: boolean;
+  /** The sidebar as a drawer, below `md`, where it cannot sit beside the page. Not persisted. */
+  mobileNavOpen: boolean;
+  /** The workspace's own nav as a drawer, below `md`. Not persisted. */
+  workspaceNavOpen: boolean;
+  /** The workspace context panel as a bottom sheet, below `lg`. Not persisted. */
+  workspaceContextOpen: boolean;
+  /** The page a click is heading to — shown as its skeleton until it arrives. Not persisted. */
+  pendingHref: string | null;
   toggleSidebar: () => void;
   setCitationsPanelOpen: (open: boolean) => void;
-  setGalleryOpen: (open: boolean) => void;
-  toggleGallery: () => void;
+  setPaletteOpen: (open: boolean | ((open: boolean) => boolean)) => void;
+  setMobileNavOpen: (open: boolean) => void;
+  setWorkspaceNavOpen: (open: boolean) => void;
+  setWorkspaceContextOpen: (open: boolean) => void;
+  setPendingHref: (href: string | null) => void;
 }
+
+/** What survives a reload: preferences only, never an open dialog. */
+type SavedPrefs = Pick<UIState, "sidebarCollapsed" | "citationsPanelOpen">;
 
 export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
       sidebarCollapsed: false,
       citationsPanelOpen: true,
-      galleryOpen: false,
+      paletteOpen: false,
+      mobileNavOpen: false,
+      workspaceNavOpen: false,
+      workspaceContextOpen: false,
+      pendingHref: null,
+      setPendingHref: (href) => set({ pendingHref: href }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setCitationsPanelOpen: (open) => set({ citationsPanelOpen: open }),
-      setGalleryOpen: (open) => set({ galleryOpen: open }),
-      toggleGallery: () => set((s) => ({ galleryOpen: !s.galleryOpen })),
+      setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
+      setWorkspaceNavOpen: (open) => set({ workspaceNavOpen: open }),
+      setWorkspaceContextOpen: (open) => set({ workspaceContextOpen: open }),
+      setPaletteOpen: (open) =>
+        set((s) => ({ paletteOpen: typeof open === "function" ? open(s.paletteOpen) : open })),
     }),
     {
       name: "atlas-ui-prefs",
-      // v2: the V2 shell replaced the collapsible sidebar with rail + panel.
-      // Reset any stuck "collapsed" state so the conversation list is visible
-      // by default after the upgrade.
-      version: 2,
-      migrate: (persisted) => ({
-        ...(persisted as Partial<UIState>),
-        sidebarCollapsed: false,
+      // v3: one ChatGPT-style sidebar replaced the rail + conversation panel.
+      // Start everyone expanded once so the new layout is seen as intended.
+      version: 3,
+      migrate: (persisted): SavedPrefs => {
+        const prev = (persisted ?? {}) as Partial<SavedPrefs>;
+        return { sidebarCollapsed: false, citationsPanelOpen: prev.citationsPanelOpen ?? true };
+      },
+      partialize: (s): SavedPrefs => ({
+        sidebarCollapsed: s.sidebarCollapsed,
+        citationsPanelOpen: s.citationsPanelOpen,
       }),
     },
   ),

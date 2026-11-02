@@ -14,6 +14,7 @@ import type {
   WorkspaceDocument,
   WorkspaceGenerateEvent,
   WorkspaceSearchResults,
+  WorkspaceDocumentTaskEvent,
 } from "@/types/workspace";
 
 const STREAM_BASE =
@@ -278,6 +279,34 @@ export function streamWorkspaceAsk(
   void streamNamedSSE<WorkspaceAskEvent>(
     `/workspaces/${workspaceId}/conversations/${conversationId}/ask/stream`,
     { question, document_ids: documentIds },
+    onEvent, onError, onComplete, controller.signal,
+  );
+  return controller;
+}
+
+/**
+ * Do what the instruction says to one document, and stream the progress.
+ *
+ * Distinct from streamWorkspaceGenerate, which authors a new document from a
+ * prompt and tops out at 2000 rows and 50 columns. This one reads the real
+ * file, has a model write code against its actual columns, runs that code
+ * against every row, and returns what it produced - so a 1251-row sheet can
+ * become a 3136-row one without either number passing through a model.
+ */
+export function streamWorkspaceDocumentTask(
+  workspaceId: string,
+  documentId: string,
+  instruction: string,
+  format: string | null,
+  conversationId: string | null,
+  onEvent: (e: WorkspaceDocumentTaskEvent) => void,
+  onError: (err: Error) => void,
+  onComplete: () => void,
+): AbortController {
+  const controller = new AbortController();
+  void streamNamedSSE<WorkspaceDocumentTaskEvent>(
+    `/workspaces/${workspaceId}/documents/${documentId}/task/stream`,
+    { instruction, format, conversation_id: conversationId },
     onEvent, onError, onComplete, controller.signal,
   );
   return controller;

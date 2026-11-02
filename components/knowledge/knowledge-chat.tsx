@@ -84,7 +84,7 @@ export function KnowledgeChat({ documentId }: { documentId: string | null }) {
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col">
-      <div className="flex-1 overflow-y-auto px-6 py-5">
+      <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
         {turns.length === 0 && (
           <div className="mt-16 text-center">
             <BookOpenCheck className="mx-auto mb-3 size-8" style={{ color: "var(--text-muted)" }} />
@@ -147,7 +147,7 @@ export function KnowledgeChat({ documentId }: { documentId: string | null }) {
       </div>
 
       {/* Composer */}
-      <div className="px-6 pb-5">
+      <div className="px-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6 sm:pb-5">
         <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-xl p-2"
           style={{ background: "var(--surface-1)", border: "1px solid var(--border-default)", boxShadow: "var(--shadow-sm)" }}>
           <textarea

@@ -1,4 +1,4 @@
-import { api } from "@/lib/api/client";
+import { api, refreshAccessToken, sessionExpired } from "@/lib/api/client";
 import { getAccessToken } from "@/lib/api/token-store";
 import type { ChatRequest, ChatResponse, ChatStreamEvent, ConversationOut, ConversationsResponse, MessageOut } from "@/types/api";
 
@@ -61,47 +61,54 @@ export function streamChatMessage(
 ): AbortController {
   const controller = new AbortController();
 
+  function openStream(token: string | null): Promise<Response> {
+    if (files && files.length > 0) {
+      // File-augmented request (images and/or documents) — multipart/form-data
+      const images = files.filter((f) => f.type.startsWith("image/"));
+      const documents = files.filter((f) => !f.type.startsWith("image/"));
+
+      const formData = new FormData();
+      formData.append("message", payload.message);
+      if (payload.conversation_id) formData.append("conversation_id", payload.conversation_id);
+      if (payload.repo_id) formData.append("repo_id", payload.repo_id);
+      formData.append("agent_mode", payload.agent_mode || "auto");
+      images.forEach((img) => formData.append("images", img));
+      documents.forEach((doc) => formData.append("documents", doc));
+
+      return fetch(`${STREAM_BASE}/chat/stream/vision`, {
+        method: "POST",
+        headers: {
+          "Accept": "text/event-stream",
+          "Cache-Control": "no-cache",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+        signal: controller.signal,
+      });
+    }
+    // Standard text request — JSON
+    return fetch(`${STREAM_BASE}/chat/stream`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+        "Cache-Control": "no-cache",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  }
+
   (async () => {
     try {
-      const token = getAccessToken();
-      let response: Response;
-
-      if (files && files.length > 0) {
-        // File-augmented request (images and/or documents) — multipart/form-data
-        const images = files.filter((f) => f.type.startsWith("image/"));
-        const documents = files.filter((f) => !f.type.startsWith("image/"));
-
-        const formData = new FormData();
-        formData.append("message", payload.message);
-        if (payload.conversation_id) formData.append("conversation_id", payload.conversation_id);
-        if (payload.repo_id) formData.append("repo_id", payload.repo_id);
-        formData.append("agent_mode", payload.agent_mode || "auto");
-        images.forEach((img) => formData.append("images", img));
-        documents.forEach((doc) => formData.append("documents", doc));
-
-        response = await fetch(`${STREAM_BASE}/chat/stream/vision`, {
-          method: "POST",
-          headers: {
-            "Accept": "text/event-stream",
-            "Cache-Control": "no-cache",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: formData,
-          signal: controller.signal,
-        });
-      } else {
-        // Standard text request — JSON
-        response = await fetch(`${STREAM_BASE}/chat/stream`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "text/event-stream",
-            "Cache-Control": "no-cache",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        });
+      let response = await openStream(getAccessToken());
+      // The same rule as every other request (lib/api/client.ts): an expired
+      // access token is renewed once and the request sent again; a session
+      // that can't be renewed goes to sign-in.
+      if (response.status === 401) {
+        const renewed = await refreshAccessToken();
+        response = renewed ? await openStream(renewed) : await sessionExpired();
       }
 
       if (!response.ok || !response.body) {

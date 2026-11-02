@@ -67,7 +67,9 @@ export function BookmarkButton({
         title={bookmarked ? "Remove bookmark" : "Bookmark"}
         className={cn(
           "group/bm rounded-md p-1 transition-opacity hover:bg-[var(--surface-3)]",
-          bookmarked ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+          // A touchscreen has no hover, so a hover-revealed control would be
+          // invisible there — show it outright on a coarse pointer.
+          bookmarked ? "opacity-100" : "opacity-0 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100",
         )}
         style={{ color: bookmarked ? "var(--accent)" : "var(--text-muted)" }}>
         <Icon className="size-3.5" />
@@ -80,8 +82,12 @@ export function BookmarkButton({
       className="group/bm inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11.5px] transition-colors hover:bg-[var(--surface-3)]"
       style={{ color: bookmarked ? "var(--accent)" : "var(--text-muted)" }}>
       <Icon className="size-3" />
-      {bookmarked ? <span className="group-hover/bm:hidden">Bookmarked</span> : label}
-      {bookmarked && <span className="hidden group-hover/bm:inline">Remove</span>}
+      {/* The icon carries it below sm — this control shares a row with three
+          others, which together need more width than a phone has. */}
+      <span className="hidden sm:inline">
+        {bookmarked ? <span className="group-hover/bm:hidden">Bookmarked</span> : label}
+        {bookmarked && <span className="hidden group-hover/bm:inline">Remove</span>}
+      </span>
     </button>
   );
 }

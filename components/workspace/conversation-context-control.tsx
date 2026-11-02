@@ -7,16 +7,15 @@ import {
   useConversationDocuments, useConversationRestore, useSetConversationMode,
   useWorkspaceDocuments,
 } from "@/lib/hooks/use-workspace";
+import { isFailed, isProcessing, isReady } from "@/lib/documents/processing-status";
 import { useViewerStore } from "@/lib/stores/viewer-store";
 import { cn } from "@/lib/utils/cn";
 import type { RetrievalMode, WorkspaceDocument } from "@/types/workspace";
 
-const ACTIVE = new Set(["queued", "processing", "retrying"]);
-
 function statusDot(status: string) {
-  if (status === "knowledge_ready") return { color: "var(--status-ready)", label: "Ready" };
-  if (status === "failed") return { color: "var(--status-error)", label: "Failed" };
-  if (ACTIVE.has(status)) return { color: "var(--status-indexing)", label: "Processing" };
+  if (isReady(status)) return { color: "var(--status-ready)", label: "Ready" };
+  if (isFailed(status)) return { color: "var(--status-error)", label: "Failed" };
+  if (isProcessing(status)) return { color: "var(--status-indexing)", label: "Processing" };
   return { color: "var(--text-muted)", label: status };
 }
 
