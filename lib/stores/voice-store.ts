@@ -14,6 +14,7 @@ export type VoiceProblem =
   | "microphone-blocked"
   | "microphone-missing"
   | "microphone-lost"
+  | "insecure-page"
   | "not-configured"
   | "busy"
   | "connect-failed"

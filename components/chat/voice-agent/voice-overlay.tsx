@@ -40,6 +40,11 @@ const PROBLEMS: Record<VoiceProblem, { title: string; detail: string; retry: boo
     detail: "What you said so far is saved in the chat. Reconnect it to carry on.",
     retry: true,
   },
+  "insecure-page": {
+    title: "Voice needs a secure connection",
+    detail: "Browsers only allow the microphone on https. This page is on http, so open it over https to talk to Atlas.",
+    retry: false,
+  },
   "not-configured": {
     title: "Voice isn't set up here",
     detail: "This deployment has no voice service configured. Typing still works as usual.",

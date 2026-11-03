@@ -289,6 +289,13 @@ export async function startVoiceSession(
   origin?: { x: number; y: number },
 ): Promise<void> {
   if (active) return;
+  // Browsers offer the microphone only to https and localhost, so on a plain http
+  // address (a phone on the office wifi, say) nothing below this line can work.
+  if (!window.isSecureContext) {
+    store().reset();
+    store().patch({ phase: "failed", problem: "insecure-page", ...(origin ? { origin } : {}) });
+    return;
+  }
   const audio = new VoiceAudio();
   const now = Date.now();
   const session: Active = {

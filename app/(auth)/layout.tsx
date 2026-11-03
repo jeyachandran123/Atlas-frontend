@@ -1,4 +1,6 @@
 import { BookOpenText, FolderGit2, Library, MessageSquare } from "lucide-react";
+import { cookies } from "next/headers";
+import { SignedInRedirect } from "@/components/auth/signed-in-redirect";
 
 /**
  * Sign-in and sign-up share this frame: the product on the left, the form on
@@ -64,7 +66,9 @@ function Tagline({ className = "" }: { className?: string }) {
   );
 }
 
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
+export default async function AuthLayout({ children }: { children: React.ReactNode }) {
+  const mayHaveSession = (await cookies()).has("atlas_refresh_token");
+
   return (
     // Exactly one screen tall, never scrolling: everything on the left is
     // sized from the viewport height (clamp + vh), so it fits at any zoom.
@@ -167,7 +171,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             </div>
 
             <div className="w-full max-w-[400px] animate-fade-up" style={{ animationDelay: "90ms" }}>
-              {children}
+              <SignedInRedirect mayHaveSession={mayHaveSession}>{children}</SignedInRedirect>
             </div>
 
             <Tagline className="mt-8 text-center lg:hidden" />
