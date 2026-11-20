@@ -544,6 +544,13 @@ export interface VoiceSessionOut {
   expires_at: string;
 }
 
+/** app/voice/search.py: handed to the voice model as the web_search tool's result. */
+export interface VoiceSearchResult {
+  found: boolean;
+  note: string;
+  results?: { source: string; title: string; published?: string; text: string }[];
+}
+
 export interface VoiceTurn {
   id: string;
   role: "user" | "assistant";

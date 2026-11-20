@@ -1,6 +1,6 @@
 import { API_BASE, api } from "@/lib/api/client";
 import { getAccessToken } from "@/lib/api/token-store";
-import type { VoiceConfig, VoiceSessionOut, VoiceTurn } from "@/types/api";
+import type { VoiceConfig, VoiceSearchResult, VoiceSessionOut, VoiceTurn } from "@/types/api";
 
 export const voiceApi = {
   config: () => api.get<VoiceConfig>("/chat/voice/config"),
@@ -10,6 +10,9 @@ export const voiceApi = {
       conversation_id: conversationId,
       resume_handle: resumeHandle ?? null,
     }),
+
+  /** A web search the voice model asked for. The reply is passed back to it as is. */
+  search: (query: string) => api.post<VoiceSearchResult>("/chat/voice/search", { query }),
 
   saveTurns: (conversationId: string, turns: VoiceTurn[]) =>
     api.post<{ conversation_id: string; saved: number }>("/chat/voice/turns", {

@@ -18,6 +18,7 @@ const STATUS: Record<VoicePhase, string> = {
   connecting: "Connecting",
   listening: "Listening",
   thinking: "Thinking",
+  searching: "Searching the web",
   speaking: "Speaking",
   reconnecting: "Reconnecting",
   ended: "",
@@ -75,6 +76,7 @@ function orbState(phase: VoicePhase, muted: boolean): OrbState {
   if (phase === "failed") return "muted";
   if (phase === "connecting" || phase === "reconnecting") return phase;
   if (phase === "thinking" || phase === "speaking") return phase;
+  if (phase === "searching") return "thinking";
   return muted ? "muted" : "listening";
 }
 

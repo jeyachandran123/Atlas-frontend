@@ -14,11 +14,22 @@ export interface LiveHandlers {
   onResumeHandle: (handle: string) => void;
   onGoAway: () => void;
   onClosed: (detail: { code: number; reason: string }) => void;
+  onToolCall: (calls: ToolCall[]) => void;
+  /** The person spoke over a pending call: its result is no longer wanted. */
+  onToolCancelled: (ids: string[]) => void;
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
 }
 
 interface ServerMessage {
   setupComplete?: unknown;
   goAway?: unknown;
+  toolCall?: { functionCalls?: Partial<ToolCall>[] };
+  toolCallCancellation?: { ids?: string[] };
   sessionResumptionUpdate?: { newHandle?: string; resumable?: boolean };
   serverContent?: {
     modelTurn?: { parts?: { inlineData?: { data?: string } }[] };
@@ -74,6 +85,13 @@ export class LiveClient {
     if (message.goAway !== undefined) this.handlers.onGoAway();
     const update = message.sessionResumptionUpdate;
     if (update?.resumable && update.newHandle) this.handlers.onResumeHandle(update.newHandle);
+    // Before serverContent: a tool call's turnComplete must find the call already pending.
+    const calls = (message.toolCall?.functionCalls ?? [])
+      .filter((c): c is ToolCall & Partial<ToolCall> => Boolean(c.id && c.name))
+      .map((c) => ({ id: c.id, name: c.name, args: c.args ?? {} }));
+    if (calls.length) this.handlers.onToolCall(calls);
+    const cancelled = message.toolCallCancellation?.ids ?? [];
+    if (cancelled.length) this.handlers.onToolCancelled(cancelled);
 
     const content = message.serverContent;
     if (!content) return;
@@ -94,6 +112,13 @@ export class LiveClient {
     if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(JSON.stringify({
       realtimeInput: { audio: { data: toBase64(pcm), mimeType: "audio/pcm;rate=16000" } },
+    }));
+  }
+
+  sendToolResponse(call: ToolCall, response: Record<string, unknown>): void {
+    if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(JSON.stringify({
+      toolResponse: { functionResponses: [{ id: call.id, name: call.name, response }] },
     }));
   }
 

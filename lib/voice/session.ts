@@ -7,7 +7,7 @@
 import { toast } from "sonner";
 import { voiceApi } from "@/lib/api/voice";
 import { useVoiceStore, type VoiceProblem } from "@/lib/stores/voice-store";
-import { LiveClient } from "@/lib/voice/live-client";
+import { LiveClient, type ToolCall } from "@/lib/voice/live-client";
 import { MicrophoneBlockedError, MicrophoneMissingError, pcmLevel, VoiceAudio } from "@/lib/voice/audio";
 import { ApiError, type VoiceConfig, type VoiceTurn } from "@/types/api";
 
@@ -52,6 +52,8 @@ interface Active {
   userText: string;
   atlasText: string;
   turnComplete: boolean;
+  /** Tool calls the model is waiting on, by id. */
+  pendingTools: Set<string>;
   /** Finished turns not yet confirmed saved. */
   unsaved: VoiceTurn[];
   saving: boolean;
@@ -165,7 +167,22 @@ function handlers(session: Active) {
       store().patch({ phase: "listening", caption: "" });
     },
     onTurnComplete: () => {
+      // Asking for a tool ends a turn, but the answer arrives in the next one:
+      // the person's question and the reply are still one exchange.
+      if (session.pendingTools.size > 0) return;
       session.turnComplete = true;
+    },
+    onToolCall: (calls: ToolCall[]) => {
+      session.lastActivity = Date.now();
+      for (const call of calls) {
+        session.pendingTools.add(call.id);
+        void runTool(session, call);
+      }
+      store().patch({ phase: "searching" });
+    },
+    onToolCancelled: (ids: string[]) => {
+      for (const id of ids) session.pendingTools.delete(id);
+      if (session.pendingTools.size === 0 && store().phase === "searching") store().patch({ phase: "listening" });
     },
     onResumeHandle: (handle: string) => {
       session.resumeHandle = handle;
@@ -179,9 +196,30 @@ function handlers(session: Active) {
   };
 }
 
+const NO_SEARCH = { found: false, note: "The search couldn't run. Tell them you couldn't check this right now." };
+
+async function runTool(session: Active, call: ToolCall): Promise<void> {
+  const query = typeof call.args.query === "string" ? call.args.query.trim() : "";
+  let result: Record<string, unknown> = NO_SEARCH;
+  if (call.name === "web_search" && query) {
+    try {
+      result = { ...(await voiceApi.search(query)) };
+    } catch {
+      result = NO_SEARCH;
+    }
+  }
+  // Cancelled, reconnected or ended while searching: nobody is waiting for this.
+  if (active !== session || !session.pendingTools.delete(call.id)) return;
+  session.lastActivity = Date.now();
+  session.live.sendToolResponse(call, result);
+  if (session.pendingTools.size === 0 && store().phase === "searching") store().patch({ phase: "thinking" });
+}
+
 async function connect(session: Active, resumeHandle?: string): Promise<void> {
   const live = await voiceApi.session(session.startConversationId, resumeHandle);
   if (active !== session) return;
+  // A call made on the old connection can't be answered on the new one.
+  session.pendingTools.clear();
   session.live.close();
   session.live = new LiveClient(handlers(session));
   session.live.connect(live.websocket_url, live.token, live.model);
@@ -317,6 +355,7 @@ export async function startVoiceSession(
     userText: "",
     atlasText: "",
     turnComplete: false,
+    pendingTools: new Set(),
     unsaved: [],
     saving: false,
     tick: setInterval(() => onTick(session), TICK_MS),

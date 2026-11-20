@@ -5,6 +5,7 @@ export type VoicePhase =
   | "connecting"
   | "listening"
   | "thinking"
+  | "searching"
   | "speaking"
   | "reconnecting"
   | "ended"
